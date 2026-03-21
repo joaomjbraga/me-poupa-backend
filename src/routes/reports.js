@@ -6,33 +6,53 @@ import { authenticate } from '../middleware/auth.js';
 const router = express.Router();
 router.use(authenticate);
 
+function getFamilyFilter(userId, familyId, params, idx) {
+  if (!familyId) {
+    return { filter: 't.user_id = $1', params: [userId], idx: 2 };
+  }
+  return { filter: '(t.user_id = $1 OR t.family_id = $2)', params: [userId, familyId], idx: 3 };
+}
+
 router.get('/pdf', async (req, res) => {
   const { month, year, date_from, date_to } = req.query;
 
-  let whereClause = 'WHERE t.user_id = $1';
-  const params = [req.userId];
-  let idx = 2;
-  let periodLabel = '';
-
-  if (date_from && date_to) {
-    whereClause += ` AND t.date >= $${idx++} AND t.date <= $${idx++}`;
-    params.push(date_from, date_to);
-    periodLabel = `${date_from} a ${date_to}`;
-  } else {
-    const m = month || new Date().getMonth() + 1;
-    const y = year || new Date().getFullYear();
-    whereClause += ` AND EXTRACT(MONTH FROM t.date) = $${idx++} AND EXTRACT(YEAR FROM t.date) = $${idx++}`;
-    params.push(m, y);
-    periodLabel = `${m}/${y}`;
-  }
-
   try {
+    const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
+    const familyId = userResult.rows[0]?.family_id;
+    const familyFilter = getFamilyFilter(req.userId, familyId, [], 0);
+
+    let periodLabel = '';
+    let params = [...familyFilter.params];
+    let idx = familyFilter.idx;
+
+    let summaryWhere = familyFilter.filter;
+    let categoryWhere = familyFilter.filter;
+    let transactionsWhere = familyFilter.filter;
+
+    if (date_from && date_to) {
+      summaryWhere += ` AND t.date >= $${idx} AND t.date <= $${idx + 1}`;
+      categoryWhere += ` AND t.date >= $${idx} AND t.date <= $${idx + 1}`;
+      transactionsWhere += ` AND t.date >= $${idx} AND t.date <= $${idx + 1}`;
+      params.push(date_from, date_to);
+      periodLabel = `${date_from} a ${date_to}`;
+      idx += 2;
+    } else {
+      const m = month || new Date().getMonth() + 1;
+      const y = year || new Date().getFullYear();
+      summaryWhere += ` AND EXTRACT(MONTH FROM t.date) = $${idx} AND EXTRACT(YEAR FROM t.date) = $${idx + 1}`;
+      categoryWhere += ` AND EXTRACT(MONTH FROM t.date) = $${idx} AND EXTRACT(YEAR FROM t.date) = $${idx + 1}`;
+      transactionsWhere += ` AND EXTRACT(MONTH FROM t.date) = $${idx} AND EXTRACT(YEAR FROM t.date) = $${idx + 1}`;
+      params.push(m, y);
+      periodLabel = `${m}/${y}`;
+      idx += 2;
+    }
+
     const summaryResult = await query(`
       SELECT 
         COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
       FROM transactions t
-      ${whereClause}
+      WHERE ${summaryWhere}
     `, params);
 
     const byCategoryResult = await query(`
@@ -41,7 +61,7 @@ router.get('/pdf', async (req, res) => {
         COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as total_expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      ${whereClause}
+      WHERE ${categoryWhere}
       GROUP BY c.id, c.name, c.color
       ORDER BY total_expense DESC
     `, params);
@@ -50,12 +70,12 @@ router.get('/pdf', async (req, res) => {
       SELECT t.date, t.description, t.type, t.amount, c.name as category_name
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
-      ${whereClause}
+      WHERE ${transactionsWhere}
       ORDER BY t.date DESC
     `, params);
 
-    const totalIncome = parseFloat(summaryResult.rows[0].total_income);
-    const totalExpense = parseFloat(summaryResult.rows[0].total_expense);
+    const totalIncome = parseFloat(summaryResult.rows[0]?.total_income || 0);
+    const totalExpense = parseFloat(summaryResult.rows[0]?.total_expense || 0);
     const balance = totalIncome - totalExpense;
 
     const doc = new PDFDocument({ margin: 50 });
