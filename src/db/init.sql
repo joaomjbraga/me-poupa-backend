@@ -1,5 +1,5 @@
 -- ============================================
--- Finanças Casa - Schema do Banco de Dados
+-- Me Poupa - Schema do Banco de Dados
 -- ============================================
 
 -- Tabela de usuários
@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  avatar_color VARCHAR(7) DEFAULT '#6366f1',
+  avatar_color VARCHAR(7) DEFAULT '#22c55e',
+  avatar_image VARCHAR(255),
+  family_id UUID,
+  invite_code UUID DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -17,9 +20,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
   name VARCHAR(100) NOT NULL,
   icon VARCHAR(50) DEFAULT '📦',
-  color VARCHAR(7) DEFAULT '#6366f1',
+  color VARCHAR(7) DEFAULT '#22c55e',
   type VARCHAR(10) CHECK (type IN ('income', 'expense')) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -28,10 +32,11 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
   name VARCHAR(100) NOT NULL,
   type VARCHAR(20) CHECK (type IN ('checking', 'savings', 'cash', 'investment', 'credit')) NOT NULL,
   balance DECIMAL(15, 2) DEFAULT 0.00,
-  color VARCHAR(7) DEFAULT '#6366f1',
+  color VARCHAR(7) DEFAULT '#22c55e',
   icon VARCHAR(50) DEFAULT '🏦',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -41,6 +46,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
   account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   type VARCHAR(10) CHECK (type IN ('income', 'expense', 'transfer')) NOT NULL,
@@ -58,6 +64,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE TABLE IF NOT EXISTS budgets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
   category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
   amount DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
   month INTEGER CHECK (month BETWEEN 1 AND 12) NOT NULL,
@@ -70,12 +77,13 @@ CREATE TABLE IF NOT EXISTS budgets (
 CREATE TABLE IF NOT EXISTS goals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
   name VARCHAR(100) NOT NULL,
   target_amount DECIMAL(15, 2) NOT NULL CHECK (target_amount > 0),
   current_amount DECIMAL(15, 2) DEFAULT 0.00,
   deadline DATE,
   icon VARCHAR(50) DEFAULT '🎯',
-  color VARCHAR(7) DEFAULT '#6366f1',
+  color VARCHAR(7) DEFAULT '#22c55e',
   completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -83,10 +91,30 @@ CREATE TABLE IF NOT EXISTS goals (
 
 -- Índices para performance
 CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX idx_transactions_family_id ON transactions(family_id);
 CREATE INDEX idx_transactions_date ON transactions(date);
 CREATE INDEX idx_transactions_type ON transactions(type);
 CREATE INDEX idx_categories_user_id ON categories(user_id);
+CREATE INDEX idx_categories_family_id ON categories(family_id);
 CREATE INDEX idx_accounts_user_id ON accounts(user_id);
+CREATE INDEX idx_accounts_family_id ON accounts(family_id);
+CREATE INDEX idx_users_invite_code ON users(invite_code);
+
+-- Tabela de notificações
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  family_id UUID,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_family_id ON notifications(family_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
 -- Trigger para atualizar updated_at
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -108,6 +136,3 @@ CREATE TRIGGER transactions_updated_at BEFORE UPDATE ON transactions
 
 CREATE TRIGGER goals_updated_at BEFORE UPDATE ON goals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
--- Dados de exemplo (categorias padrão inseridas ao criar usuário via trigger)
--- As categorias são criadas pela API no registro do usuário

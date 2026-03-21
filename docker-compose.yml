@@ -18,26 +18,5 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: financas_api
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      PORT: 3001
-      DATABASE_URL: postgresql://financas_user:financas_pass@postgres:5432/financas_casa
-      JWT_SECRET: super_secret_jwt_key_change_in_production
-      JWT_EXPIRES_IN: 7d
-    ports:
-      - "3001:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
-
 volumes:
   postgres_data:
