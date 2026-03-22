@@ -45,16 +45,16 @@ O servidor estará disponível em `http://localhost:3001`
 
 Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 
-**Receitas:**
+**Entradas:**
 - Salário
-- Extra/Banco
+- Extra
 
-**Despesas:**
-- Móveis Parcelados
+**Saídas:**
 - Comida
 - Luz e Água
-- Faculdade
+- Fatura Bancária
 - Internet
+- Faculdade
 - Entretenimento
 
 ## API Endpoints

@@ -9,12 +9,12 @@ const router = express.Router();
 
 const DEFAULT_CATEGORIES = [
   { name: 'Salário', icon: '💼', color: '#22c55e', type: 'income' },
-  { name: 'Extra/Banco', icon: '💰', color: '#16a34a', type: 'income' },
-  { name: 'Móveis Parcelados', icon: '🛋️', color: '#f97316', type: 'expense' },
+  { name: 'Extra', icon: '💰', color: '#16a34a', type: 'income' },
   { name: 'Comida', icon: '🍽️', color: '#ef4444', type: 'expense' },
   { name: 'Luz e Água', icon: '💡', color: '#f59e0b', type: 'expense' },
-  { name: 'Faculdade', icon: '🎓', color: '#16a34a', type: 'expense' },
+  { name: 'Fatura Bancária', icon: '💳', color: '#f97316', type: 'expense' },
   { name: 'Internet', icon: '📡', color: '#0a5c2a', type: 'expense' },
+  { name: 'Faculdade', icon: '🎓', color: '#6366f1', type: 'expense' },
   { name: 'Entretenimento', icon: '🎮', color: '#ec4899', type: 'expense' },
 ];
 
