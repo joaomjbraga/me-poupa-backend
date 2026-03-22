@@ -37,11 +37,30 @@ npm run dev
 
 ### Com Docker
 
+Certifique-se de ter o Docker e Docker Compose instalados.
+
 ```bash
 docker-compose up -d
 ```
 
+Isso irá:
+1. Subir o banco de dados PostgreSQL na porta 5432
+2. Buildar e iniciar a API na porta 3001
+3. Criar automaticamente o banco de dados e aplicar o schema
+
 O servidor estará disponível em `http://localhost:3001`
+
+**Logs:**
+```bash
+docker-compose logs -f api    # Ver logs da API
+docker-compose logs -f        # Ver todos os logs
+```
+
+**Parar:**
+```bash
+docker-compose down           # Parar sem remover dados
+docker-compose down -v        # Parar e remover volumes (reset completo)
+```
 
 ## Categorias Padrão
 

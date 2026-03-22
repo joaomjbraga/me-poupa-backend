@@ -1,22 +1,39 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: financas_db
+    container_name: mepoupa_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: financas_user
-      POSTGRES_PASSWORD: financas_pass
-      POSTGRES_DB: financas_casa
+      POSTGRES_USER: mepoupa_user
+      POSTGRES_PASSWORD: mepoupa_pass
+      POSTGRES_DB: mepoupa_casa
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U financas_user -d financas_casa"]
+      test: ["CMD-SHELL", "pg_isready -U mepoupa_user -d mepoupa_casa"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  api:
+    build: .
+    container_name: mepoupa_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mepoupa_user:mepoupa_pass@postgres:5432/mepoupa_casa
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
 
 volumes:
   postgres_data:
