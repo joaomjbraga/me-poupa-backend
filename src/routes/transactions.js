@@ -10,8 +10,8 @@ router.use(authenticate);
 function getFamilyFilter(userId, familyId, params, idx) {
   if (!familyId) {
     return { filter: 't.user_id = $1', params: [userId], idx: 2 };
-}
-
+  }
+  return { filter: '(t.user_id = $1 OR t.family_id = $2)', params: [userId, familyId], idx: 3 };
 }
 
 router.get('/', async (req, res) => {
