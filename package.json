@@ -2,16 +2,23 @@
   "name": "me-poupa-backend",
   "version": "1.0.0",
   "type": "module",
+  "author": {
+    "name": "João M J Braga",
+    "email": "joomdeveloper.app@gmail.com",
+    "url": "https://github.com/joaomjbraga"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "pdfkit": "^0.18.0",
     "pg": "^8.20.0",

@@ -7,6 +7,10 @@ import { emitFamilyUpdate } from '../utils/socketHelpers.js';
 
 const router = express.Router();
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
 const DEFAULT_CATEGORIES = [
   { name: 'Salário', icon: '💼', color: '#22c55e', type: 'income' },
   { name: 'Extra', icon: '💰', color: '#16a34a', type: 'income' },
@@ -20,6 +24,31 @@ const DEFAULT_CATEGORIES = [
   { name: 'Calçados', icon: '👟', color: '#06b6d4', type: 'expense' },
 ];
 
+function validatePassword(password) {
+  const errors = [];
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    errors.push(`Senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres`);
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Senha deve conter pelo menos uma letra maiúscula');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Senha deve conter pelo menos uma letra minúscula');
+  }
+  if (!/\d/.test(password)) {
+    errors.push('Senha deve conter pelo menos um número');
+  }
+  return errors;
+}
+
+function createToken(user) {
+  return jwt.sign(
+    { userId: user.id, familyId: user.family_id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+}
+
 router.post('/register', authLimiter, async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -27,12 +56,21 @@ router.post('/register', authLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+  if (name.trim().length < 2) {
+    return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ error: 'Email inválido' });
+  }
+
+  const passwordErrors = validatePassword(password);
+  if (passwordErrors.length > 0) {
+    return res.status(400).json({ error: passwordErrors.join('; ') });
   }
 
   try {
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email já cadastrado' });
     }
@@ -47,7 +85,7 @@ router.post('/register', authLimiter, async (req, res) => {
       `INSERT INTO users (name, email, password_hash, avatar_color, family_id, invite_code) 
        VALUES ($1, $2, $3, $4, $5, gen_random_uuid()) 
        RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at`,
-      [name, email, passwordHash, avatarColor, familyId]
+      [name.trim(), email.toLowerCase(), passwordHash, avatarColor, familyId]
     );
 
     const user = userResult.rows[0];
@@ -59,11 +97,14 @@ router.post('/register', authLimiter, async (req, res) => {
       );
     }
 
-    const token = jwt.sign(
-      { userId: user.id, familyId: user.family_id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const token = createToken(user);
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     res.status(201).json({ token, user });
   } catch (err) {
@@ -82,7 +123,7 @@ router.post('/login', authLimiter, async (req, res) => {
   try {
     const result = await query(
       'SELECT id, name, email, password_hash, avatar_color, avatar_image, family_id, invite_code, created_at FROM users WHERE email = $1',
-      [email]
+      [email.toLowerCase()]
     );
 
     if (result.rows.length === 0) {
@@ -96,11 +137,14 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    const token = jwt.sign(
-      { userId: user.id, familyId: user.family_id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const token = createToken(user);
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     const { password_hash, ...userWithoutPassword } = user;
     res.json({ token, user: userWithoutPassword });
@@ -110,11 +154,15 @@ router.post('/login', authLimiter, async (req, res) => {
   }
 });
 
-router.get('/me', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
+router.post('/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ message: 'Logout realizado' });
+});
 
-  const token = authHeader.substring(7);
+router.get('/me', async (req, res) => {
+  const token = req.cookies?.token || req.headers.authorization?.substring(7);
+  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const result = await query(
@@ -129,14 +177,17 @@ router.get('/me', async (req, res) => {
 });
 
 router.put('/profile', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
+  const token = req.cookies?.token || req.headers.authorization?.substring(7);
+  if (!token) return res.status(401).json({ error: 'Não autorizado' });
 
-  const token = authHeader.substring(7);
   const { name, avatar_color, avatar_image } = req.body;
 
   if (!name || name.trim().length < 2) {
     return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+  }
+
+  if (name.trim().length > 100) {
+    return res.status(400).json({ error: 'Nome muito longo' });
   }
 
   try {
@@ -166,27 +217,26 @@ router.put('/profile', async (req, res) => {
 });
 
 router.put('/email', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
+  const token = req.cookies?.token || req.headers.authorization?.substring(7);
+  if (!token) return res.status(401).json({ error: 'Não autorizado' });
 
-  const token = authHeader.substring(7);
   const { email } = req.body;
 
-  if (!email || !email.includes('@')) {
+  if (!email || !EMAIL_REGEX.test(email)) {
     return res.status(400).json({ error: 'Email inválido' });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    const existing = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, decoded.userId]);
+    const existing = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email.toLowerCase(), decoded.userId]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Este email já está em uso' });
     }
 
     const result = await query(
       'UPDATE users SET email = $1 WHERE id = $2 RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at',
-      [email, decoded.userId]
+      [email.toLowerCase(), decoded.userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
     res.json(result.rows[0]);
@@ -196,18 +246,18 @@ router.put('/email', async (req, res) => {
 });
 
 router.put('/password', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
+  const token = req.cookies?.token || req.headers.authorization?.substring(7);
+  if (!token) return res.status(401).json({ error: 'Não autorizado' });
 
-  const token = authHeader.substring(7);
   const { current_password, new_password } = req.body;
 
   if (!current_password || !new_password) {
     return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
   }
 
-  if (new_password.length < 6) {
-    return res.status(400).json({ error: 'Nova senha deve ter pelo menos 6 caracteres' });
+  const passwordErrors = validatePassword(new_password);
+  if (passwordErrors.length > 0) {
+    return res.status(400).json({ error: passwordErrors.join('; ') });
   }
 
   try {

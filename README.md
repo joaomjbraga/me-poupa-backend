@@ -1,25 +1,27 @@
 # Me Poupa - Backend
 
-API RESTful para gestão de finanças de casais. Desenvolvido para casais controlarem despesas domésticas juntos.
+API RESTful para gestão de finanças de casais.
 
 ## Tecnologias
 
 - **Node.js** com Express
 - **PostgreSQL** para banco de dados
-- **JWT** para autenticação
-- **bcryptjs** para hash de senhas
+- **JWT** para autenticação com cookies httpOnly
+- **bcryptjs** para hash de senhas (12 rounds)
+- **Socket.IO** para comunicação em tempo real
+- **Helmet.js** para headers de segurança
 - **pdfkit** para geração de relatórios PDF
 - **Docker** para containerização
 
 ## Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
+Crie um arquivo `.env` na raiz do projeto:
 
 ```env
 NODE_ENV=development
 PORT=3001
 DATABASE_URL=postgresql://user:password@localhost:5432/financas_casa
-JWT_SECRET=sua_chave_secreta_aqui
+JWT_SECRET=sua_chave_secreta_aqui_muito_longa_e_aleatoria
 JWT_EXPIRES_IN=7d
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
@@ -52,10 +54,12 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 **Saídas:**
 - Comida
 - Luz e Água
-- Fatura Bancária
+- Fatura
 - Internet
 - Faculdade
 - Entretenimento
+- Roupas
+- Calçados
 
 ## API Endpoints
 
@@ -65,7 +69,11 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 |--------|----------|-----------|
 | POST | `/api/auth/register` | Cadastro de usuário |
 | POST | `/api/auth/login` | Login |
+| POST | `/api/auth/logout` | Logout |
 | GET | `/api/auth/me` | Dados do usuário logado |
+| PUT | `/api/auth/profile` | Atualizar perfil |
+| PUT | `/api/auth/email` | Alterar email |
+| PUT | `/api/auth/password` | Alterar senha |
 
 ### Transações
 
@@ -84,22 +92,8 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 - `date_from` e `date_to`: Filtrar por período customizado (YYYY-MM-DD)
 - `type`: Filtrar por tipo ('income', 'expense')
 - `category_id`: Filtrar por categoria
-- `account_id`: Filtrar por conta
-
-### Transferências
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/api/transfers` | Transferir entre contas |
-
-### Contas
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/accounts` | Lista contas |
-| POST | `/api/accounts` | Criar conta |
-| PUT | `/api/accounts/:id` | Atualizar conta |
-| DELETE | `/api/accounts/:id` | Remover conta |
+- `limit`: Limite de resultados (máx 1000)
+- `offset`: Paginação
 
 ### Categorias
 
@@ -108,23 +102,6 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 | GET | `/api/categories` | Lista categorias |
 | POST | `/api/categories` | Criar categoria |
 | DELETE | `/api/categories/:id` | Remover categoria |
-
-### Orçamentos
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/budgets` | Lista orçamentos do mês |
-| POST | `/api/budgets` | Criar orçamento |
-| DELETE | `/api/budgets/:id` | Remover orçamento |
-
-### Metas
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/goals` | Lista metas |
-| POST | `/api/goals` | Criar meta |
-| PUT | `/api/goals/:id` | Atualizar meta |
-| DELETE | `/api/goals/:id` | Remover meta |
 
 ### Família Compartilhada
 
@@ -139,15 +116,9 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
 | GET | `/api/notifications` | Lista notificações |
-| GET | `/api/notifications/unread-count` | Contagem de não lidas |
 | PUT | `/api/notifications/:id/read` | Marcar como lida |
 | PUT | `/api/notifications/read-all` | Marcar todas como lidas |
 | DELETE | `/api/notifications/:id` | Remover notificação |
-
-**Tipos de notificação:**
-- `family_join`: Quando alguém entra na família
-- `family_leave`: Quando alguém sai da família
-- `finance_change`: Quando alguém altera transações
 
 ### Relatórios
 
@@ -161,11 +132,30 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 
 ## Segurança
 
-- **Rate Limiting**: 100 req/15min geral, 10 req/15min para auth
+### Implementado
+
+- **Cookies httpOnly**: JWT armazenado em cookies seguros
+- **Helmet.js**: Headers de segurança (CSP, X-Frame-Options, etc.)
+- **Rate Limiting**: 500 req/15min geral, 20 req/15min para auth
 - **Validação de Input**: Middleware de validação em todas as rotas
 - **CORS**: Origins configuráveis via variável de ambiente
-- **Senhas**: Hash com bcrypt (12 rounds)
+- **Sanitização**: Strings limitadas e escapadas
+- **bcrypt**: Hash com 12 rounds
 - **JWT**: Tokens com expiração configurável
+- **WebSocket Rate Limit**: 100 msgs/min por usuário
+
+### Requisitos de Senha
+
+- Mínimo 8 caracteres
+- Pelo menos uma letra maiúscula
+- Pelo menos uma letra minúscula
+- Pelo menos um número
+
+### Validações
+
+- Email: Regex validado
+- Transações: Tipo, valor positivo, data, descrição
+- Query params: Limites máximos definidos
 
 ## Scripts
 
@@ -182,15 +172,17 @@ src/
 │   ├── pool.js       # Conexão PostgreSQL
 │   └── init.sql      # Schema do banco
 ├── middleware/
-│   ├── auth.js        # Autenticação JWT
+│   ├── auth.js        # Autenticação JWT + cookies
 │   ├── rateLimiter.js # Rate limiting
 │   └── validate.js    # Validação de input
 ├── routes/
-│   ├── auth.js       # Rotas de autenticação
+│   ├── auth.js        # Rotas de autenticação
 │   ├── transactions.js # Rotas de transações
-│   ├── resources.js   # Contas, categorias, orçamentos, metas
+│   ├── resources.js   # Categorias
 │   ├── family.js     # Rotas de família compartilhada
 │   ├── notifications.js # Rotas de notificações
 │   └── reports.js    # Rotas de relatórios PDF
+├── utils/
+│   └── socketHelpers.js # Helpers para Socket.IO
 └── index.js          # Entry point
 ```

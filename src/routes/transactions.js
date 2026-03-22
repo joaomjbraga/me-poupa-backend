@@ -7,20 +7,43 @@ import { emitFinanceUpdate, emitFamilyUpdate } from '../utils/socketHelpers.js';
 const router = express.Router();
 router.use(authenticate);
 
-function getFamilyFilter(userId, familyId, params, idx) {
+const MAX_LIMIT = 1000;
+const MAX_HISTORY_MONTHS = 24;
+
+function getFamilyFilter(userId, familyId) {
   if (!familyId) {
-    return { filter: 't.user_id = $1', params: [userId], idx: 2 };
+    return { filter: 't.user_id = $1', params: [userId] };
   }
-  return { filter: '(t.user_id = $1 OR t.family_id = $2)', params: [userId, familyId], idx: 3 };
+  return { filter: '(t.user_id = $1 OR t.family_id = $2)', params: [userId, familyId] };
+}
+
+function sanitizeString(str, maxLength = 255) {
+  if (!str) return str;
+  return String(str).substring(0, maxLength).trim();
 }
 
 router.get('/', async (req, res) => {
-  const { month, year, type, category_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
+  let { month, year, type, category_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
+
+  month = parseInt(month);
+  year = parseInt(year);
+  limit = Math.min(parseInt(limit) || 50, MAX_LIMIT);
+  offset = Math.max(parseInt(offset) || 0, 0);
+
+  if (month && (month < 1 || month > 12)) {
+    return res.status(400).json({ error: 'Mês inválido' });
+  }
+  if (year && (year < 2000 || year > 2100)) {
+    return res.status(400).json({ error: 'Ano inválido' });
+  }
+  if (type && !['income', 'expense'].includes(type)) {
+    return res.status(400).json({ error: 'Tipo inválido' });
+  }
 
   try {
     const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
     const familyId = userResult.rows[0]?.family_id;
-    const familyFilter = getFamilyFilter(req.userId, familyId, [], 0);
+    const familyFilter = getFamilyFilter(req.userId, familyId);
 
     let sql = `
       SELECT t.*, 
@@ -32,13 +55,19 @@ router.get('/', async (req, res) => {
       WHERE ${familyFilter.filter}
     `;
     const params = [...familyFilter.params];
-    let idx = familyFilter.idx;
+    let idx = familyFilter.params.length + 1;
 
     if (date_from) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date_from)) {
+        return res.status(400).json({ error: 'Data inicial inválida' });
+      }
       sql += ` AND t.date >= $${idx++}`;
       params.push(date_from);
     }
     if (date_to) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+        return res.status(400).json({ error: 'Data final inválida' });
+      }
       sql += ` AND t.date <= $${idx++}`;
       params.push(date_to);
     }
@@ -66,7 +95,7 @@ router.get('/summary', async (req, res) => {
   try {
     const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
     const familyId = userResult.rows[0]?.family_id;
-    const familyFilter = getFamilyFilter(req.userId, familyId, [], 0);
+    const familyFilter = getFamilyFilter(req.userId, familyId);
 
     let sql = `
       SELECT 
@@ -84,7 +113,7 @@ router.get('/summary', async (req, res) => {
       WHERE ${familyFilter.filter}
     `;
     const params = [...familyFilter.params];
-    let idx = familyFilter.idx;
+    let idx = familyFilter.params.length + 1;
 
     if (date_from) {
       sql += ` AND date >= $${idx}`;
@@ -119,13 +148,13 @@ router.get('/summary', async (req, res) => {
 });
 
 router.get('/history', async (req, res) => {
-  const { months = 6 } = req.query;
-  const n = parseInt(months) || 6;
+  let { months = 6 } = req.query;
+  months = Math.min(Math.max(parseInt(months) || 6, 1), MAX_HISTORY_MONTHS);
 
   try {
     const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
     const familyId = userResult.rows[0]?.family_id;
-    const familyFilter = getFamilyFilter(req.userId, familyId, [], 0);
+    const familyFilter = getFamilyFilter(req.userId, familyId);
 
     const result = await query(`
       SELECT 
@@ -135,7 +164,7 @@ router.get('/history', async (req, res) => {
         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expense
       FROM transactions t
       WHERE ${familyFilter.filter}
-        AND date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '${n - 1} months'
+        AND date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '${months - 1} months'
       GROUP BY EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
       ORDER BY year, month
     `, familyFilter.params);
@@ -155,7 +184,7 @@ router.get('/export', async (req, res) => {
   try {
     const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
     const familyId = userResult.rows[0]?.family_id;
-    const familyFilter = getFamilyFilter(req.userId, familyId, [], 0);
+    const familyFilter = getFamilyFilter(req.userId, familyId);
 
     let sql = `
       SELECT 
@@ -171,7 +200,7 @@ router.get('/export', async (req, res) => {
       WHERE ${familyFilter.filter}
     `;
     const params = [...familyFilter.params];
-    let idx = familyFilter.idx;
+    let idx = familyFilter.params.length + 1;
 
     if (date_from) {
       sql += ` AND t.date >= $${idx++}`;
@@ -193,7 +222,7 @@ router.get('/export', async (req, res) => {
     const headers = 'Data,Descricao,Tipo,Categoria,Valor,Usuario\n';
     const rows = result.rows.map(t => {
       const typeLabel = t.type === 'income' ? 'Entrada' : 'Saida';
-      return `"${t.date}","${t.description}","${typeLabel}","${t.category_name}","${t.amount}","${t.user_name || ''}"`;
+      return `"${t.date}","${(t.description || '').replace(/"/g, '""')}","${typeLabel}","${t.category_name}","${t.amount}","${(t.user_name || '').replace(/"/g, '""')}"`;
     }).join('\n');
 
     const filename = date_from && date_to ? `transacoes-${date_from}-${date_to}` : `transacoes-${m}-${y}`;
@@ -202,12 +231,24 @@ router.get('/export', async (req, res) => {
     res.send(headers + rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erro ao exportar transacoes' });
+    res.status(500).json({ error: 'Erro ao exportar transações' });
   }
 });
 
-router.post('/', validateBody(async (schema) => schema), async (req, res) => {
+router.post('/', validateBody({
+  type: { required: true, enum: ['income', 'expense'] },
+  amount: { required: true, type: 'positive' },
+  description: { required: true, minLength: 1, maxLength: 255 },
+  date: { required: true, date: true },
+  notes: { type: 'string', maxLength: 1000 },
+  category_id: { type: 'string' }
+}), async (req, res) => {
   const { category_id, type, amount, description, date, notes } = req.body;
+
+  const amountNum = parseFloat(amount);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    return res.status(400).json({ error: 'Valor deve ser um número positivo' });
+  }
 
   try {
     const userResult = await query('SELECT name, family_id FROM users WHERE id = $1', [req.userId]);
@@ -218,7 +259,16 @@ router.post('/', validateBody(async (schema) => schema), async (req, res) => {
       INSERT INTO transactions (user_id, family_id, category_id, type, amount, description, date, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [req.userId, familyId, category_id || null, type, amount, description, date, notes || null]);
+    `, [
+      req.userId, 
+      familyId, 
+      category_id || null, 
+      type, 
+      amountNum, 
+      sanitizeString(description), 
+      date, 
+      sanitizeString(notes, 1000)
+    ]);
 
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
@@ -232,12 +282,24 @@ router.post('/', validateBody(async (schema) => schema), async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erro ao criar transacao' });
+    res.status(500).json({ error: 'Erro ao criar transação' });
   }
 });
 
-router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
+router.put('/:id', validateBody({
+  type: { required: true, enum: ['income', 'expense'] },
+  amount: { required: true, type: 'positive' },
+  description: { required: true, minLength: 1, maxLength: 255 },
+  date: { required: true, date: true },
+  notes: { type: 'string', maxLength: 1000 },
+  category_id: { type: 'string' }
+}), async (req, res) => {
   const { category_id, type, amount, description, date, notes } = req.body;
+
+  const amountNum = parseFloat(amount);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    return res.status(400).json({ error: 'Valor deve ser um número positivo' });
+  }
 
   try {
     const userResult = await query('SELECT name, family_id FROM users WHERE id = $1', [req.userId]);
@@ -248,12 +310,21 @@ router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
       'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
-    if (original.rows.length === 0) return res.status(404).json({ error: 'Transacao nao encontrada' });
+    if (original.rows.length === 0) return res.status(404).json({ error: 'Transação não encontrada' });
 
     const result = await query(`
       UPDATE transactions SET category_id=$1, type=$2, amount=$3, description=$4, date=$5, notes=$6
       WHERE id=$7 AND user_id=$8 RETURNING *
-    `, [category_id || null, type, amount, description, date, notes || null, req.params.id, req.userId]);
+    `, [
+      category_id || null, 
+      type, 
+      amountNum, 
+      sanitizeString(description), 
+      date, 
+      sanitizeString(notes, 1000), 
+      req.params.id, 
+      req.userId
+    ]);
 
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
@@ -281,7 +352,7 @@ router.delete('/:id', async (req, res) => {
       'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
-    if (orig.rows.length === 0) return res.status(404).json({ error: 'Transacao nao encontrada' });
+    if (orig.rows.length === 0) return res.status(404).json({ error: 'Transação não encontrada' });
 
     const t = orig.rows[0];
 

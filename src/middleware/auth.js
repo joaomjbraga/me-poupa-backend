@@ -1,17 +1,16 @@
 import jwt from 'jsonwebtoken';
 
 export const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const token = req.cookies?.token || req.headers.authorization?.substring(7);
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!token) {
     return res.status(401).json({ error: 'Token não fornecido' });
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.userId;
+    req.familyId = decoded.familyId;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido ou expirado' });
