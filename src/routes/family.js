@@ -13,6 +13,11 @@ router.post('/join', async (req, res) => {
     return res.status(400).json({ error: 'Código de convite é obrigatório' });
   }
 
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(invite_code)) {
+    return res.status(400).json({ error: 'Código de convite inválido' });
+  }
+
   try {
     const hostUser = await query(
       'SELECT id, name, family_id FROM users WHERE invite_code = $1',
