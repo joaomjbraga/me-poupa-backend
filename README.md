@@ -186,3 +186,16 @@ src/
 │   └── socketHelpers.js # Helpers para Socket.IO
 └── index.js          # Entry point
 ```
+
+## Suporte
+
+Reporte issues em:
+[https://github.com/joaomjbraga//issues](https://github.com/joaomjbraga//issues)
+
+| [![João M J Braga](https://github.com/joaomjbraga.png?size=100)](https://github.com/joaomjbraga)
+
+Se você gostou deste tema, considere deixar uma ⭐ no repositório!
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
