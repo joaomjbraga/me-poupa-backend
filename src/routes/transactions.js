@@ -10,11 +10,10 @@ router.use(authenticate);
 function getFamilyFilter(userId, familyId, params, idx) {
   if (!familyId) {
     return { filter: 't.user_id = $1', params: [userId], idx: 2 };
-  }
-  return { filter: '(t.user_id = $1 OR t.family_id = $2)', params: [userId, familyId], idx: 3 };
 }
 
-// GET /api/transactions
+}
+
 router.get('/', async (req, res) => {
   const { month, year, type, category_id, account_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
 
@@ -64,7 +63,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/transactions/summary
 router.get('/summary', async (req, res) => {
   const { month, year, date_from, date_to } = req.query;
 
@@ -123,7 +121,6 @@ router.get('/summary', async (req, res) => {
   }
 });
 
-// GET /api/transactions/history
 router.get('/history', async (req, res) => {
   const { months = 6 } = req.query;
   const n = parseInt(months) || 6;
@@ -153,7 +150,6 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// GET /api/transactions/export
 router.get('/export', async (req, res) => {
   const { month, year, date_from, date_to } = req.query;
   const m = month || new Date().getMonth() + 1;
@@ -214,7 +210,6 @@ router.get('/export', async (req, res) => {
   }
 });
 
-// POST /api/transactions
 router.post('/', validateBody(async (schema) => schema), async (req, res) => {
   const { account_id, category_id, type, amount, description, date, notes, is_recurring, recurring_interval } = req.body;
 
@@ -253,7 +248,6 @@ router.post('/', validateBody(async (schema) => schema), async (req, res) => {
   }
 });
 
-// PUT /api/transactions/:id
 router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
   const { account_id, category_id, type, amount, description, date, notes } = req.body;
 
@@ -301,7 +295,6 @@ router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
   }
 });
 
-// DELETE /api/transactions/:id
 router.delete('/:id', async (req, res) => {
   try {
     const userResult = await query('SELECT name, family_id FROM users WHERE id = $1', [req.userId]);

@@ -39,7 +39,6 @@ app.use(express.json());
 
 app.use('/api', generalLimiter);
 
-// Socket.IO connection handling
 const userSockets = new Map();
 
 io.on('connection', async (socket) => {
@@ -67,11 +66,9 @@ io.on('connection', async (socket) => {
   });
 });
 
-// Make io accessible to routes
 app.set('io', io);
 app.set('userSockets', userSockets);
 
-// Routes
 app.use('/api/auth', authRouter);
 app.use('/api/transactions', transactionsRouter);
 app.use('/api/categories', categoriesRouter);

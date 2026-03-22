@@ -18,7 +18,6 @@ const DEFAULT_CATEGORIES = [
   { name: 'Entretenimento', icon: '🎮', color: '#ec4899', type: 'expense' },
 ];
 
-// POST /api/auth/register
 router.post('/register', authLimiter, async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -74,7 +73,6 @@ router.post('/register', authLimiter, async (req, res) => {
   }
 });
 
-// POST /api/auth/login
 router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
 
@@ -111,7 +109,6 @@ router.post('/login', authLimiter, async (req, res) => {
   }
 });
 
-// GET /api/auth/me
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
@@ -130,7 +127,6 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// PUT /api/auth/profile - Atualizar nome e avatar
 router.put('/profile', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
@@ -168,7 +164,6 @@ router.put('/profile', async (req, res) => {
   }
 });
 
-// PUT /api/auth/email - Atualizar email
 router.put('/email', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
@@ -199,7 +194,6 @@ router.put('/email', async (req, res) => {
   }
 });
 
-// PUT /api/auth/password - Atualizar senha
 router.put('/password', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Não autorizado' });
