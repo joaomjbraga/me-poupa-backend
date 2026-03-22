@@ -16,6 +16,8 @@ const DEFAULT_CATEGORIES = [
   { name: 'Internet', icon: '📡', color: '#0a5c2a', type: 'expense' },
   { name: 'Faculdade', icon: '🎓', color: '#6366f1', type: 'expense' },
   { name: 'Entretenimento', icon: '🎮', color: '#ec4899', type: 'expense' },
+  { name: 'Roupas', icon: '👕', color: '#8b5cf6', type: 'expense' },
+  { name: 'Calçados', icon: '👟', color: '#06b6d4', type: 'expense' },
 ];
 
 router.post('/register', authLimiter, async (req, res) => {
