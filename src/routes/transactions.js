@@ -273,8 +273,6 @@ router.post('/', validateBody({
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
 
-    console.log(`💰 Transaction created by user:${req.userId} in family:${familyId}`);
-    
     emitFinanceUpdate(io, userSockets, familyId, req.userId, {
       type: 'transaction_created',
       transaction: result.rows[0],
@@ -331,8 +329,6 @@ router.put('/:id', validateBody({
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
 
-    console.log(`✏️ Transaction updated by user:${req.userId} in family:${familyId}`);
-    
     emitFinanceUpdate(io, userSockets, familyId, req.userId, {
       type: 'transaction_updated',
       transaction: result.rows[0],
@@ -365,8 +361,6 @@ router.delete('/:id', async (req, res) => {
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
 
-    console.log(`🗑️ Transaction deleted by user:${req.userId} in family:${familyId}`);
-    
     emitFinanceUpdate(io, userSockets, familyId, req.userId, {
       type: 'transaction_deleted',
       transaction: t,

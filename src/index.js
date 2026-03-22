@@ -127,7 +127,7 @@ app.set('trust proxy', 1);
 const allowedOrigins = (() => {
   const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean);
   if (envOrigins?.length > 0) return envOrigins;
-  if (!isProduction) return ['http://localhost:5173', 'http://localhost:3000'];
+  if (!isProduction) return ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
   console.warn('⚠️ ALLOWED_ORIGINS não configurado em produção!');
   return [];
 })();
@@ -146,13 +146,12 @@ const corsOptions = {
 };
 
 const io = new Server(httpServer, {
-  cors: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS Socket.IO: Origin ${origin} não permitida`));
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  transports: ['polling', 'websocket']
 });
 
 app.use(helmet({
@@ -162,7 +161,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'https:', 'ws:', 'wss:'],
+      connectSrc: ["'self'", 'http://localhost:*', 'https:', 'ws:', 'wss:'],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -182,10 +181,7 @@ const MESSAGE_RATE_WINDOW = 60000;
 io.on('connection', async (socket) => {
   const token = socket.handshake.auth.token;
   
-  console.log('🔌 New socket connection attempt');
-  
   if (!token) {
-    console.log('❌ No token provided');
     socket.emit('connect_error', { message: 'Token não fornecido' });
     socket.disconnect(true);
     return;
@@ -195,10 +191,7 @@ io.on('connection', async (socket) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { userId, familyId } = decoded;
     
-    console.log('🔐 Token decoded:', { userId, familyId });
-    
     if (!userId) {
-      console.log('❌ Invalid token - no userId');
       socket.emit('connect_error', { message: 'Token inválido' });
       socket.disconnect(true);
       return;
@@ -206,7 +199,6 @@ io.on('connection', async (socket) => {
 
     const result = await query('SELECT id, family_id FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
-      console.log('❌ User not found:', userId);
       socket.emit('connect_error', { message: 'Usuário não encontrado' });
       socket.disconnect(true);
       return;
@@ -223,15 +215,9 @@ io.on('connection', async (socket) => {
     
     if (actualFamilyId) {
       socket.join(`family:${actualFamilyId}`);
-      console.log(`✅ User ${userId} joined family room: family:${actualFamilyId}`);
-    } else {
-      console.log(`✅ User ${userId} connected (no family)`);
     }
     
-    console.log(`📍 Socket ${socket.id} rooms:`, Array.from(socket.rooms));
-    
   } catch (err) {
-    console.error('❌ Socket auth error:', err.message);
     socket.emit('connect_error', { message: 'Token inválido ou expirado' });
     socket.disconnect(true);
   }
