@@ -12,7 +12,7 @@ const DEFAULT_CATEGORIES = [
   { name: 'Extra', icon: '💰', color: '#16a34a', type: 'income' },
   { name: 'Comida', icon: '🍽️', color: '#ef4444', type: 'expense' },
   { name: 'Luz e Água', icon: '💡', color: '#f59e0b', type: 'expense' },
-  { name: 'Fatura Bancária', icon: '💳', color: '#f97316', type: 'expense' },
+  { name: 'Fatura', icon: '💳', color: '#f97316', type: 'expense' },
   { name: 'Internet', icon: '📡', color: '#0a5c2a', type: 'expense' },
   { name: 'Faculdade', icon: '🎓', color: '#6366f1', type: 'expense' },
   { name: 'Entretenimento', icon: '🎮', color: '#ec4899', type: 'expense' },
@@ -59,9 +59,11 @@ router.post('/register', authLimiter, async (req, res) => {
       );
     }
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN,
-    });
+    const token = jwt.sign(
+      { userId: user.id, familyId: user.family_id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
 
     res.status(201).json({ token, user });
   } catch (err) {
@@ -94,9 +96,11 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN,
-    });
+    const token = jwt.sign(
+      { userId: user.id, familyId: user.family_id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
 
     const { password_hash, ...userWithoutPassword } = user;
     res.json({ token, user: userWithoutPassword });

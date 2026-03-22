@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import authRouter from './routes/auth.js';
 import transactionsRouter from './routes/transactions.js';
@@ -42,24 +43,44 @@ app.use('/api', generalLimiter);
 const userSockets = new Map();
 
 io.on('connection', async (socket) => {
-  const userId = socket.handshake.auth.userId;
+  const token = socket.handshake.auth.token;
   
-  if (userId) {
-    userSockets.set(userId, socket.id);
+  if (!token) {
+    socket.emit('connect_error', { message: 'Token não fornecido' });
+    socket.disconnect(true);
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { userId, familyId } = decoded;
     
-    try {
-      const result = await query('SELECT family_id FROM users WHERE id = $1', [userId]);
-      if (result.rows.length > 0 && result.rows[0].family_id) {
-        const familyId = result.rows[0].family_id;
-        socket.join(`family:${familyId}`);
-        console.log(`User ${userId} joined family room: family:${familyId}`);
-      }
-    } catch (err) {
-      console.error('Error getting family_id for socket:', err);
+    if (!userId || !familyId) {
+      socket.emit('connect_error', { message: 'Token inválido' });
+      socket.disconnect(true);
+      return;
     }
+
+    const result = await query('SELECT id FROM users WHERE id = $1 AND family_id = $2', [userId, familyId]);
+    if (result.rows.length === 0) {
+      socket.emit('connect_error', { message: 'Usuário não encontrado' });
+      socket.disconnect(true);
+      return;
+    }
+
+    socket.data.userId = userId;
+    socket.data.familyId = familyId;
+    userSockets.set(userId, socket.id);
+    socket.join(`family:${familyId}`);
+    console.log(`User ${userId} authenticated and joined family room: family:${familyId}`);
+  } catch (err) {
+    console.error('Socket auth error:', err.message);
+    socket.emit('connect_error', { message: 'Token inválido ou expirado' });
+    socket.disconnect(true);
   }
 
   socket.on('disconnect', () => {
+    const userId = socket.data?.userId;
     if (userId) {
       userSockets.delete(userId);
     }
