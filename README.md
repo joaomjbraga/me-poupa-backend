@@ -1,6 +1,6 @@
 # Me Poupa - Backend
 
-API RESTful para gestão de finanças de casais.
+API RESTful para gestão de finanças pessoais e familiares.
 
 ## Tecnologias
 
@@ -62,24 +62,6 @@ docker-compose down           # Parar sem remover dados
 docker-compose down -v        # Parar e remover volumes (reset completo)
 ```
 
-## Categorias Padrão
-
-Ao criar uma conta, as seguintes categorias são automaticamente criadas:
-
-**Entradas:**
-- Salário
-- Extra
-
-**Saídas:**
-- Comida
-- Luz e Água
-- Fatura
-- Internet
-- Faculdade
-- Entretenimento
-- Roupas
-- Calçados
-
 ## API Endpoints
 
 ### Autenticação
@@ -126,9 +108,16 @@ Ao criar uma conta, as seguintes categorias são automaticamente criadas:
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
+| POST | `/api/family/create` | Criar uma nova família |
 | POST | `/api/family/join` | Entrar em uma família via código |
 | POST | `/api/family/leave` | Sair da família |
 | GET | `/api/family/members` | Listar membros da família |
+
+**Fluxo de família:**
+- Ao se registrar, o usuário não pertence a nenhuma família
+- O usuário pode criar uma família própria via `/family/create`
+- Ou entrar em uma família existente usando o código de convite
+- Ao criar uma família, categorias padrão são criadas automaticamente
 
 ### Notificações
 
@@ -209,12 +198,12 @@ src/
 ## Suporte
 
 Reporte issues em:
-[https://github.com/joaomjbraga//issues](https://github.com/joaomjbraga//issues)
+https://github.com/joaomjbraga/me-poupa/issues
 
 | [![João M J Braga](https://github.com/joaomjbraga.png?size=100)](https://github.com/joaomjbraga)
 
 Se você gostou deste tema, considere deixar uma ⭐ no repositório!
 
-## 📄 Licença
+## Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
