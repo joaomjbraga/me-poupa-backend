@@ -120,28 +120,40 @@ const app = express();
 const httpServer = createServer(app);
 
 const isProduction = process.env.NODE_ENV === 'production';
+const isHttps = process.env.HTTPS_ENABLED === 'true' || isProduction;
 
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-  }
-});
+app.set('trust proxy', 1);
+
+const allowedOrigins = (() => {
+  const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean);
+  if (envOrigins?.length > 0) return envOrigins;
+  if (!isProduction) return ['http://localhost:5173', 'http://localhost:3000'];
+  console.warn('⚠️ ALLOWED_ORIGINS não configurado em produção!');
+  return [];
+})();
 
 const PORT = process.env.PORT || 3001;
 
-if (!process.env.ALLOWED_ORIGINS && !isProduction) {
-  console.warn('⚠️ ALLOWED_ORIGINS não configurado. Usando localhost em desenvolvimento.');
-}
-
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
 const corsOptions = {
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: Origin ${origin} não permitida`));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 };
+
+const io = new Server(httpServer, {
+  cors: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS Socket.IO: Origin ${origin} não permitida`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+});
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -150,7 +162,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'ws:', 'wss:'],
+      connectSrc: ["'self'", 'https:', 'ws:', 'wss:'],
     },
   },
   crossOriginEmbedderPolicy: false,

@@ -6,6 +6,7 @@ import { authLimiter } from '../middleware/rateLimiter.js';
 import { emitFamilyUpdate } from '../utils/socketHelpers.js';
 
 const router = express.Router();
+const isProduction = process.env.NODE_ENV === 'production';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN_LENGTH = 8;
@@ -101,9 +102,10 @@ router.post('/register', authLimiter, async (req, res) => {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
     });
 
     res.status(201).json({ token, user });
@@ -141,9 +143,10 @@ router.post('/login', authLimiter, async (req, res) => {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
     });
 
     const { password_hash, ...userWithoutPassword } = user;
@@ -155,7 +158,7 @@ router.post('/login', authLimiter, async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', { path: '/' });
   res.json({ message: 'Logout realizado' });
 });
 
