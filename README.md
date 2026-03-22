@@ -1,21 +1,86 @@
-![Logo](.github/logo-horizontal.svg)
+<p align="center">
+  <img src=".github/logo-horizontal.svg" alt="Me Poupa" width="320" />
+</p>
 
-API RESTful para gestão de finanças pessoais e familiares.
+<p align="center">
+  <strong>API RESTful para gestão de finanças pessoais e familiares</strong><br/>
+  Controle compartilhado de receitas e despesas, em tempo real, com segurança de ponta a ponta.
+</p>
 
-## Tecnologias
+<p align="center">
+  <a href="https://me-poupa.vercel.app" target="_blank">
+    <img src="https://img.shields.io/badge/demo-ao%20vivo-4CAF50?style=for-the-badge&logo=vercel&logoColor=white" alt="Demo" />
+  </a>
+  <img src="https://img.shields.io/badge/node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/licença-MIT-yellow?style=for-the-badge" alt="MIT" />
+</p>
 
-- **Node.js** com Express
-- **PostgreSQL** para banco de dados
-- **JWT** para autenticação com cookies httpOnly
-- **bcryptjs** para hash de senhas (12 rounds)
-- **Socket.IO** para comunicação em tempo real
-- **Helmet.js** para headers de segurança
-- **pdfkit** para geração de relatórios PDF
-- **Docker** para containerização
+---
 
-## Variáveis de Ambiente
+## 📋 Índice
 
-Crie um arquivo `.env` na raiz do projeto:
+- [Sobre o Projeto](#-sobre-o-projeto)
+- [Funcionalidades](#-funcionalidades)
+- [Tecnologias](#-tecnologias)
+- [Configuração do Ambiente](#-configuração-do-ambiente)
+- [Instalação](#-instalação)
+- [Endpoints da API](#-endpoints-da-api)
+- [Segurança](#-segurança)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Scripts Disponíveis](#-scripts-disponíveis)
+- [Contribuição](#-contribuição)
+- [Licença](#-licença)
+
+---
+
+## 💡 Sobre o Projeto
+
+O **Me Poupa** nasceu para resolver um problema simples e cotidiano: como casais e famílias podem controlar suas finanças juntos, de forma organizada e segura?
+
+A API oferece uma base sólida para aplicações de gestão financeira compartilhada — com autenticação robusta, organização por categorias, notificações em tempo real e geração de relatórios. Tudo pensado para funcionar tanto de forma individual quanto em grupo familiar.
+
+> 🌐 O frontend está disponível em **[me-poupa.vercel.app](https://me-poupa.vercel.app)**
+
+---
+
+## ✨ Funcionalidades
+
+- 👤 **Autenticação segura** com JWT armazenado em cookies httpOnly
+- 💸 **Gestão de transações** — receitas, despesas, filtros avançados e exportação CSV
+- 🏷️ **Categorias personalizáveis** por grupo familiar
+- 👨‍👩‍👧 **Grupos familiares** com código de convite e controle compartilhado
+- 🔔 **Notificações em tempo real** via WebSocket (Socket.IO)
+- 📄 **Relatórios em PDF** por período ou mês/ano
+- 🛡️ **Camadas de segurança** com rate limiting, validação e sanitização de inputs
+- 🐳 **Docker-ready** com ambiente completo via Docker Compose
+
+---
+
+## 🛠 Tecnologias
+
+| Tecnologia | Finalidade |
+|---|---|
+| **Node.js + Express** | Framework principal da API |
+| **PostgreSQL** | Banco de dados relacional |
+| **JWT + Cookies httpOnly** | Autenticação segura sem exposição de token |
+| **bcryptjs** | Hash de senhas com 12 rounds |
+| **Zod** | Validação e tipagem de schemas |
+| **Socket.IO** | Notificações em tempo real |
+| **Helmet.js** | Proteção via headers HTTP |
+| **pdfkit** | Geração de relatórios PDF |
+| **Docker + Docker Compose** | Containerização e orquestração |
+
+---
+
+## ⚙️ Configuração do Ambiente
+
+Copie o arquivo de exemplo e preencha com suas variáveis:
+
+```bash
+cp .env.example .env
+```
 
 ```env
 NODE_ENV=development
@@ -26,184 +91,248 @@ JWT_EXPIRES_IN=7d
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
-## Instalação
+> ⚠️ **Nunca versione o `.env`.** Ele já está no `.gitignore`.
 
-### Sem Docker
+---
+
+## 🚀 Instalação
+
+### Opção 1 — Sem Docker
 
 ```bash
+# Instalar dependências
 npm install
+
+# Iniciar em modo desenvolvimento (hot reload)
 npm run dev
 ```
 
-### Com Docker
+### Opção 2 — Com Docker *(recomendado)*
 
-Certifique-se de ter o Docker e Docker Compose instalados.
+Requer [Docker](https://docs.docker.com/get-docker/) e [Docker Compose](https://docs.docker.com/compose/) instalados.
 
 ```bash
 docker-compose up -d
 ```
 
-Isso irá:
-1. Subir o banco de dados PostgreSQL na porta 5432
-2. Buildar e iniciar a API na porta 3001
-3. Criar automaticamente o banco de dados e aplicar o schema
+Esse único comando irá:
 
-O servidor estará disponível em `http://localhost:3001`
+1. ✅ Subir o PostgreSQL na porta `5432`
+2. ✅ Fazer o build e iniciar a API na porta `3001`
+3. ✅ Criar o banco de dados e aplicar o schema automaticamente
 
-**Logs:**
-```bash
-docker-compose logs -f api    # Ver logs da API
-docker-compose logs -f        # Ver todos os logs
-```
+A API estará disponível em **`http://localhost:3001`**
 
-**Parar:**
-```bash
-docker-compose down           # Parar sem remover dados
-docker-compose down -v        # Parar e remover volumes (reset completo)
-```
-
-## API Endpoints
-
-### Autenticação
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/api/auth/register` | Cadastro de usuário |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Dados do usuário logado |
-| PUT | `/api/auth/profile` | Atualizar perfil |
-| PUT | `/api/auth/email` | Alterar email |
-| PUT | `/api/auth/password` | Alterar senha |
-
-### Transações
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/transactions` | Lista transações (com filtros) |
-| GET | `/api/transactions/summary` | Resumo do período |
-| GET | `/api/transactions/history` | Histórico de meses |
-| GET | `/api/transactions/export` | Exportar CSV |
-| POST | `/api/transactions` | Criar transação |
-| PUT | `/api/transactions/:id` | Atualizar transação |
-| DELETE | `/api/transactions/:id` | Remover transação |
-
-**Filtros disponíveis:**
-- `month` e `year`: Filtrar por mês/ano
-- `date_from` e `date_to`: Filtrar por período customizado (YYYY-MM-DD)
-- `type`: Filtrar por tipo ('income', 'expense')
-- `category_id`: Filtrar por categoria
-- `limit`: Limite de resultados (máx 1000)
-- `offset`: Paginação
-
-### Categorias
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/categories` | Lista categorias |
-| POST | `/api/categories` | Criar categoria |
-| DELETE | `/api/categories/:id` | Remover categoria |
-
-### Família Compartilhada
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/api/family/create` | Criar uma nova família |
-| POST | `/api/family/join` | Entrar em uma família via código |
-| POST | `/api/family/leave` | Sair da família |
-| GET | `/api/family/members` | Listar membros da família |
-
-**Fluxo de família:**
-- Ao se registrar, o usuário não pertence a nenhuma família
-- O usuário pode criar uma família própria via `/family/create`
-- Ou entrar em uma família existente usando o código de convite
-- Ao criar uma família, categorias padrão são criadas automaticamente
-
-### Notificações
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/notifications` | Lista notificações |
-| PUT | `/api/notifications/:id/read` | Marcar como lida |
-| PUT | `/api/notifications/read-all` | Marcar todas como lidas |
-| DELETE | `/api/notifications/:id` | Remover notificação |
-
-### Relatórios
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/reports/pdf` | Gerar relatório PDF do período |
-
-**Parâmetros:**
-- `month` e `year`: Mês/ano específico
-- `date_from` e `date_to`: Período customizado
-
-## Segurança
-
-### Implementado
-
-- **Cookies httpOnly**: JWT armazenado em cookies seguros
-- **Helmet.js**: Headers de segurança (CSP, X-Frame-Options, etc.)
-- **Rate Limiting**: 500 req/15min geral, 20 req/15min para auth
-- **Validação de Input**: Middleware de validação em todas as rotas
-- **CORS**: Origins configuráveis via variável de ambiente
-- **Sanitização**: Strings limitadas e escapadas
-- **bcrypt**: Hash com 12 rounds
-- **JWT**: Tokens com expiração configurável
-- **WebSocket Rate Limit**: 100 msgs/min por usuário
-
-### Requisitos de Senha
-
-- Mínimo 8 caracteres
-- Pelo menos uma letra maiúscula
-- Pelo menos uma letra minúscula
-- Pelo menos um número
-
-### Validações
-
-- Email: Regex validado
-- Transações: Tipo, valor positivo, data, descrição
-- Query params: Limites máximos definidos
-
-## Scripts
+#### Comandos úteis
 
 ```bash
-npm start      # Iniciar produção
-npm run dev    # Iniciar desenvolvimento (com nodemon)
+# Acompanhar logs da API
+docker-compose logs -f api
+
+# Acompanhar todos os serviços
+docker-compose logs -f
+
+# Parar os serviços (mantém os dados)
+docker-compose down
+
+# Parar e resetar tudo (remove volumes)
+docker-compose down -v
 ```
 
-## Estrutura do Projeto
+---
+
+## 📡 Endpoints da API
+
+### 🔐 Autenticação
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `POST` | `/api/auth/register` | Cadastrar novo usuário |
+| `POST` | `/api/auth/login` | Realizar login |
+| `POST` | `/api/auth/logout` | Encerrar sessão |
+| `GET` | `/api/auth/me` | Dados do usuário autenticado |
+| `PUT` | `/api/auth/profile` | Atualizar nome/perfil |
+| `PUT` | `/api/auth/email` | Alterar e-mail |
+| `PUT` | `/api/auth/password` | Alterar senha |
+
+---
+
+### 💸 Transações
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `GET` | `/api/transactions` | Listar transações com filtros |
+| `GET` | `/api/transactions/summary` | Resumo financeiro do período |
+| `GET` | `/api/transactions/history` | Histórico mensal |
+| `GET` | `/api/transactions/export` | Exportar transações em CSV |
+| `POST` | `/api/transactions` | Criar nova transação |
+| `PUT` | `/api/transactions/:id` | Editar transação existente |
+| `DELETE` | `/api/transactions/:id` | Remover transação |
+
+#### Filtros disponíveis (query params)
+
+| Parâmetro | Tipo | Descrição |
+|---|---|---|
+| `month` + `year` | `number` | Filtrar por mês e ano |
+| `date_from` + `date_to` | `YYYY-MM-DD` | Filtrar por intervalo de datas |
+| `type` | `income` \| `expense` | Filtrar por tipo |
+| `category_id` | `number` | Filtrar por categoria |
+| `limit` | `number` | Máximo de resultados (até 1000) |
+| `offset` | `number` | Deslocamento para paginação |
+
+---
+
+### 🏷️ Categorias
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `GET` | `/api/categories` | Listar categorias |
+| `POST` | `/api/categories` | Criar nova categoria |
+| `DELETE` | `/api/categories/:id` | Remover categoria |
+
+---
+
+### 👨‍👩‍👧 Família Compartilhada
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `POST` | `/api/family/create` | Criar um grupo familiar |
+| `POST` | `/api/family/join` | Entrar em um grupo via código de convite |
+| `POST` | `/api/family/leave` | Sair do grupo familiar |
+| `GET` | `/api/family/members` | Listar membros do grupo |
+
+#### Fluxo de uso
 
 ```
-src/
-├── db/
-│   ├── pool.js       # Conexão PostgreSQL
-│   └── init.sql      # Schema do banco
-├── middleware/
-│   ├── auth.js        # Autenticação JWT + cookies
-│   ├── rateLimiter.js # Rate limiting
-│   └── validate.js    # Validação de input
-├── routes/
-│   ├── auth.js        # Rotas de autenticação
-│   ├── transactions.js # Rotas de transações
-│   ├── resources.js   # Categorias
-│   ├── family.js     # Rotas de família compartilhada
-│   ├── notifications.js # Rotas de notificações
-│   └── reports.js    # Rotas de relatórios PDF
-├── utils/
-│   └── socketHelpers.js # Helpers para Socket.IO
-└── index.js          # Entry point
+Novo usuário
+     │
+     ├──► Cria uma família  ──► Torna-se administrador
+     │         └── Categorias padrão criadas automaticamente
+     │
+     └──► Entra em família existente  ──► Usa código de convite
 ```
 
-## Suporte
+---
 
-Reporte issues em:
-https://github.com/joaomjbraga/me-poupa/issues
+### 🔔 Notificações
 
-| [![João M J Braga](https://github.com/joaomjbraga.png?size=100)](https://github.com/joaomjbraga)
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `GET` | `/api/notifications` | Listar notificações |
+| `PUT` | `/api/notifications/:id/read` | Marcar uma como lida |
+| `PUT` | `/api/notifications/read-all` | Marcar todas como lidas |
+| `DELETE` | `/api/notifications/:id` | Remover notificação |
 
-Se você gostou deste tema, considere deixar uma ⭐ no repositório!
+---
 
-## Licença
+### 📄 Relatórios
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `GET` | `/api/reports/pdf` | Gerar relatório PDF do período |
+
+| Parâmetro | Descrição |
+|---|---|
+| `month` + `year` | Relatório de um mês específico |
+| `date_from` + `date_to` | Relatório de um intervalo customizado |
+
+---
+
+## 🔒 Segurança
+
+### Mecanismos implementados
+
+| Camada | Detalhes |
+|---|---|
+| **Cookies httpOnly** | JWT inacessível via JavaScript — protegido contra XSS |
+| **Helmet.js** | Headers de segurança: CSP, X-Frame-Options, HSTS e outros |
+| **Rate Limiting** | 500 req/15min geral · 20 req/15min nas rotas de autenticação |
+| **Zod** | Validação e sanitização de todos os inputs da API |
+| **CORS** | Origins restritas e configuráveis via variável de ambiente |
+| **bcrypt** | Hash de senhas com 12 rounds |
+| **JWT** | Tokens com expiração configurável e renovação controlada |
+| **WebSocket Rate Limit** | Máximo de 100 mensagens/min por usuário conectado |
+
+### Requisitos mínimos de senha
+
+```
+✅ Mínimo de 8 caracteres
+✅ Pelo menos uma letra maiúscula (A–Z)
+✅ Pelo menos uma letra minúscula (a–z)
+✅ Pelo menos um número (0–9)
+```
+
+---
+
+## 📁 Estrutura do Projeto
+
+```
+me-poupa-backend/
+│
+├── src/
+│   ├── db/
+│   │   ├── pool.js              # Conexão com o PostgreSQL
+│   │   └── init.sql             # Schema e dados iniciais do banco
+│   │
+│   ├── middleware/
+│   │   ├── auth.js              # Autenticação via JWT + cookies
+│   │   ├── rateLimiter.js       # Controle de taxa de requisições
+│   │   └── validate.js          # Validação de inputs com Zod
+│   │
+│   ├── routes/
+│   │   ├── auth.js              # Autenticação e perfil
+│   │   ├── transactions.js      # CRUD de transações
+│   │   ├── resources.js         # Categorias
+│   │   ├── family.js            # Grupos familiares
+│   │   ├── notifications.js     # Notificações
+│   │   └── reports.js           # Geração de PDF
+│   │
+│   ├── utils/
+│   │   └── socketHelpers.js     # Helpers para eventos Socket.IO
+│   │
+│   └── index.js                 # Entry point da aplicação
+│
+├── .env.example                 # Modelo de variáveis de ambiente
+├── docker-compose.yml           # Orquestração dos serviços
+├── Dockerfile                   # Imagem da aplicação
+└── package.json
+```
+
+---
+
+## 📜 Scripts Disponíveis
+
+```bash
+npm start      # Iniciar em produção
+npm run dev    # Iniciar em desenvolvimento (com hot reload via nodemon)
+```
+
+---
+
+## 🤝 Contribuição
+
+Contribuições são bem-vindas! Para reportar bugs ou sugerir melhorias, abra uma issue:
+
+**👉 [github.com/joaomjbraga/me-poupa-backend/issues](https://github.com/joaomjbraga/me-poupa-backend/issues)**
+
+<br/>
+
+<p align="center">
+  <a href="https://github.com/joaomjbraga">
+    <img src="https://github.com/joaomjbraga.png?size=96" width="72" style="border-radius: 50%" alt="João M J Braga" />
+  </a>
+  <br/>
+  <strong><a href="https://github.com/joaomjbraga">João M J Braga</a></strong>
+  <br/>
+  <sub>Autor e mantenedor</sub>
+</p>
+
+<p align="center">
+  Se este projeto te ajudou, deixe uma ⭐ no repositório — isso ajuda muito!
+</p>
+
+---
+
+## 📝 Licença
+
+Distribuído sob a licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
