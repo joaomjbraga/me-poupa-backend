@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+
+  <!-- Moeda caindo -->
+  <rect x="52" y="2" width="7" height="13" rx="3.5" fill="#f59e0b"/>
+  <text x="55.5" y="11" text-anchor="middle" font-size="6.5" font-weight="500" fill="#0f1923" font-family="sans-serif">R$</text>
+
+  <!-- Orelhas -->
+  <ellipse cx="40" cy="30" rx="10" ry="9" fill="#22c55e"/>
+  <ellipse cx="72" cy="30" rx="10" ry="9" fill="#22c55e"/>
+
+  <!-- Corpo -->
+  <ellipse cx="56" cy="55" rx="50" ry="44" fill="#22c55e"/>
+
+  <!-- Barriga -->
+  <ellipse cx="56" cy="63" rx="30" ry="22" fill="#16a34a"/>
+
+  <!-- Fenda -->
+  <rect x="48" y="18" width="17" height="4" rx="2" fill="#0a5c2a"/>
+
+  <!-- Olho esquerdo -->
+  <circle cx="43" cy="46" r="5" fill="white"/>
+  <circle cx="44.5" cy="47" r="3" fill="#0f1923"/>
+  <circle cx="45" cy="46" r="1" fill="white"/>
+
+  <!-- Olho direito -->
+  <circle cx="69" cy="46" r="5" fill="white"/>
+  <circle cx="70.5" cy="47" r="3" fill="#0f1923"/>
+  <circle cx="71" cy="46" r="1" fill="white"/>
+
+  <!-- Focinho -->
+  <ellipse cx="56" cy="58" rx="13" ry="9" fill="#16a34a"/>
+  <circle cx="51.5" cy="58" r="3" fill="#0a5c2a" opacity="0.45"/>
+  <circle cx="60.5" cy="58" r="3" fill="#0a5c2a" opacity="0.45"/>
+
+  <!-- Sorriso -->
+  <path d="M47 66 Q56 73 65 66" fill="none" stroke="#0a5c2a" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>
+
+  <!-- Patinhas -->
+  <ellipse cx="34" cy="88" rx="10" ry="6" fill="#16a34a"/>
+  <ellipse cx="50" cy="92" rx="10" ry="6" fill="#16a34a"/>
+  <ellipse cx="62" cy="92" rx="10" ry="6" fill="#16a34a"/>
+  <ellipse cx="78" cy="88" rx="10" ry="6" fill="#16a34a"/>
+
+  <!-- Rabo -->
+  <path d="M104 52 Q118 44 116 57 Q114 66 105 62" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Nome -->
+  <text x="128" y="68" font-size="44" font-weight="700" fill="#22c55e" font-family="sans-serif" letter-spacing="-1.5">Me Poupa</text>
+
+  <!-- Tagline -->
+  <text x="130" y="90" font-size="13" fill="#16a34a" font-family="sans-serif" letter-spacing="2">finanças da casa</text>
+
+</svg>

@@ -1,4 +1,4 @@
-# Me Poupa - Backend
+![Logo](.github/logo-horizontal.svg)
 
 API RESTful para gestão de finanças pessoais e familiares.
 
