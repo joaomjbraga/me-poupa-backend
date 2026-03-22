@@ -196,9 +196,10 @@ router.get('/export', async (req, res) => {
     const result = await query(sql, params);
 
     const headers = 'Data,Descrição,Tipo,Categoria,Conta,Valor,Usuário\n';
-    const rows = result.rows.map(t => 
-      `"${t.date}","${t.description}","${t.type}","${t.category_name}","${t.account_name}","${t.amount}","${t.user_name || ''}"`
-    ).join('\n');
+    const rows = result.rows.map(t => {
+      const typeLabel = t.type === 'income' ? 'Entrada' : 'Saída';
+      return `"${t.date}","${t.description}","${typeLabel}","${t.category_name}","${t.account_name}","${t.amount}","${t.user_name || ''}"`;
+    }).join('\n');
 
     const filename = date_from && date_to ? `transacoes-${date_from}-${date_to}` : `transacoes-${m}-${y}`;
     res.setHeader('Content-Type', 'text/csv');
