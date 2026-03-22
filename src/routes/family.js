@@ -183,6 +183,41 @@ router.get('/members', async (req, res) => {
   }
 });
 
+router.post('/create', async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    const userResult = await query('SELECT family_id FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+    
+    if (user.family_id) {
+      return res.status(400).json({ error: 'Você já faz parte de uma família' });
+    }
+
+    const familyId = crypto.randomUUID();
+    
+    await query('UPDATE users SET family_id = $1 WHERE id = $2', [familyId, userId]);
+    await query('UPDATE categories SET family_id = $1 WHERE user_id = $2', [familyId, userId]);
+    await query('UPDATE transactions SET family_id = $1 WHERE user_id = $2', [familyId, userId]);
+    
+    const updatedUser = await query(
+      'SELECT id, name, email, avatar_color, avatar_image, family_id, invite_code FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    const token = createToken(updatedUser.rows[0]);
+    
+    res.json({ 
+      message: 'Família criada com sucesso!',
+      user: updatedUser.rows[0],
+      token
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao criar família' });
+  }
+});
+
 async function getFamilyMembers(familyId) {
   if (!familyId) return [];
   const result = await query(

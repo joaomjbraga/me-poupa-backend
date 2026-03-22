@@ -80,23 +80,14 @@ router.post('/register', authLimiter, async (req, res) => {
     const colors = ['#22c55e', '#16a34a', '#f59e0b', '#ef4444', '#ec4899', '#f97316'];
     const avatarColor = colors[Math.floor(Math.random() * colors.length)];
 
-    const familyId = crypto.randomUUID();
-
     const userResult = await query(
-      `INSERT INTO users (name, email, password_hash, avatar_color, family_id, invite_code) 
-       VALUES ($1, $2, $3, $4, $5, gen_random_uuid()) 
+      `INSERT INTO users (name, email, password_hash, avatar_color, invite_code) 
+       VALUES ($1, $2, $3, $4, gen_random_uuid()) 
        RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at`,
-      [name.trim(), email.toLowerCase(), passwordHash, avatarColor, familyId]
+      [name.trim(), email.toLowerCase(), passwordHash, avatarColor]
     );
 
     const user = userResult.rows[0];
-
-    for (const cat of DEFAULT_CATEGORIES) {
-      await query(
-        'INSERT INTO categories (user_id, family_id, name, icon, color, type) VALUES ($1, $2, $3, $4, $5, $6)',
-        [user.id, familyId, cat.name, cat.icon, cat.color, cat.type]
-      );
-    }
 
     const token = createToken(user);
 
