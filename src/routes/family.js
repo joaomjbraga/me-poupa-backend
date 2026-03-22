@@ -1,10 +1,19 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { query } from '../db/pool.js';
 import { authenticate } from '../middleware/auth.js';
 import { emitFamilyUpdate, emitToUser } from '../utils/socketHelpers.js';
 
 const router = express.Router();
 router.use(authenticate);
+
+function createToken(user) {
+  return jwt.sign(
+    { userId: user.id, familyId: user.family_id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+}
 
 router.post('/join', async (req, res) => {
   const { invite_code } = req.body;
@@ -66,7 +75,7 @@ router.post('/join', async (req, res) => {
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
 
-    emitFamilyUpdate(io, userSockets, familyId, {
+    emitFamilyUpdate(io, userSockets, familyId, currentUserId, {
       type: 'member_joined',
       userId: currentUserId,
       userName: currentUser.name,
@@ -78,9 +87,12 @@ router.post('/join', async (req, res) => {
       [currentUserId]
     );
 
+    const newToken = createToken(updatedUser.rows[0]);
+
     res.json({
       message: 'Você entrou na família com sucesso!',
-      user: updatedUser.rows[0]
+      user: updatedUser.rows[0],
+      token: newToken
     });
   } catch (err) {
     console.error(err);
@@ -132,7 +144,7 @@ router.post('/leave', async (req, res) => {
     if (parseInt(remainingMembers.rows[0].count) === 0) {
       await query('UPDATE users SET family_id = NULL WHERE family_id = $1', [familyId]);
     } else {
-      emitFamilyUpdate(io, userSockets, familyId, {
+      emitFamilyUpdate(io, userSockets, familyId, req.userId, {
         type: 'member_left',
         userId: req.userId,
         userName: user.name,
@@ -145,9 +157,12 @@ router.post('/leave', async (req, res) => {
       [req.userId]
     );
 
+    const newToken = createToken(updatedUser.rows[0]);
+
     res.json({
       message: 'Você saiu da família com sucesso!',
-      user: updatedUser.rows[0]
+      user: updatedUser.rows[0],
+      token: newToken
     });
   } catch (err) {
     console.error(err);

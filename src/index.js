@@ -182,7 +182,10 @@ const MESSAGE_RATE_WINDOW = 60000;
 io.on('connection', async (socket) => {
   const token = socket.handshake.auth.token;
   
+  console.log('🔌 New socket connection attempt');
+  
   if (!token) {
+    console.log('❌ No token provided');
     socket.emit('connect_error', { message: 'Token não fornecido' });
     socket.disconnect(true);
     return;
@@ -192,27 +195,43 @@ io.on('connection', async (socket) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { userId, familyId } = decoded;
     
-    if (!userId || !familyId) {
+    console.log('🔐 Token decoded:', { userId, familyId });
+    
+    if (!userId) {
+      console.log('❌ Invalid token - no userId');
       socket.emit('connect_error', { message: 'Token inválido' });
       socket.disconnect(true);
       return;
     }
 
-    const result = await query('SELECT id FROM users WHERE id = $1 AND family_id = $2', [userId, familyId]);
+    const result = await query('SELECT id, family_id FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
+      console.log('❌ User not found:', userId);
       socket.emit('connect_error', { message: 'Usuário não encontrado' });
       socket.disconnect(true);
       return;
     }
 
+    const dbFamilyId = result.rows[0].family_id;
+    const actualFamilyId = familyId || dbFamilyId;
+    
     socket.data.userId = userId;
-    socket.data.familyId = familyId;
+    socket.data.familyId = actualFamilyId;
+    
     userSockets.set(userId, socket.id);
     userMessageCount.set(userId, { count: 0, resetTime: Date.now() + MESSAGE_RATE_WINDOW });
-    socket.join(`family:${familyId}`);
-    console.log(`User ${userId} authenticated and joined family room: family:${familyId}`);
+    
+    if (actualFamilyId) {
+      socket.join(`family:${actualFamilyId}`);
+      console.log(`✅ User ${userId} joined family room: family:${actualFamilyId}`);
+    } else {
+      console.log(`✅ User ${userId} connected (no family)`);
+    }
+    
+    console.log(`📍 Socket ${socket.id} rooms:`, Array.from(socket.rooms));
+    
   } catch (err) {
-    console.error('Socket auth error:', err.message);
+    console.error('❌ Socket auth error:', err.message);
     socket.emit('connect_error', { message: 'Token inválido ou expirado' });
     socket.disconnect(true);
   }
