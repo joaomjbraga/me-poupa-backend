@@ -59,11 +59,6 @@ router.post('/register', authLimiter, async (req, res) => {
       );
     }
 
-    await query(
-      'INSERT INTO accounts (user_id, family_id, name, type, balance, color, icon) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [user.id, familyId, 'Carteira', 'cash', 0, '#22c55e', '👛']
-    );
-
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRES_IN,
     });

@@ -72,7 +72,7 @@ router.get('/pdf', async (req, res) => {
       const y = parseInt(year)  || new Date().getFullYear();
       dateFilter += ` AND EXTRACT(MONTH FROM t.date) = $${idx} AND EXTRACT(YEAR FROM t.date) = $${idx + 1}`;
       dateParams.push(m, y);
-      const mNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+      const mNames = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
                       'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
       periodLabel = `${mNames[m - 1]} de ${y}`;
     }
@@ -99,11 +99,9 @@ router.get('/pdf', async (req, res) => {
 
       query(`
         SELECT t.date, t.description, t.type, t.amount,
-               c.name AS category_name,
-               a.name AS account_name
+               c.name AS category_name
         FROM transactions t
         LEFT JOIN categories c ON t.category_id = c.id
-        LEFT JOIN accounts   a ON t.account_id  = a.id
         WHERE ${dateFilter}
         ORDER BY t.date DESC, t.created_at DESC
       `, dateParams),
@@ -116,7 +114,7 @@ router.get('/pdf', async (req, res) => {
 
     const doc = new PDFDocument({
       margin: 0, size: 'A4', bufferPages: true,
-      info: { Title: `Extrato Me Poupa — ${periodLabel}`, Author: 'Me Poupa' },
+      info: { Title: `Extrato Me Poupa - ${periodLabel}`, Author: 'Me Poupa' },
     });
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -132,10 +130,8 @@ router.get('/pdf', async (req, res) => {
     const CW  = MR - ML;
 
     const COL = {
-      date:  ML,          dateW:  62,
-      desc:  ML + 64,     descW:  186,
-      cat:   ML + 252,    catW:   108,
-      acc:   ML + 362,    accW:   68,
+      desc:  ML + 10,     descW:  280,
+      cat:   ML + 292,    catW:   118,
       amt:   MR - 68,     amtW:   68,
     };
 
@@ -151,26 +147,26 @@ router.get('/pdf', async (req, res) => {
        .text('Titular:', ML, 66, { lineBreak: false });
 
     doc.fillColor(C.white).fontSize(9).font('Helvetica-Bold')
-       .text(`${userName}   ·   ${userEmail}`, ML + 44, 66, { lineBreak: false });
+       .text(`${userName}   |   ${userEmail}`, ML + 44, 66, { lineBreak: false });
 
     doc.fillColor('rgba(255,255,255,0.55)').fontSize(7.5).font('Helvetica')
-       .text('PERÍODO', MR - 160, 18, { width: 110, align: 'right', lineBreak: false });
+       .text('PERIODO', MR - 160, 18, { width: 110, align: 'right', lineBreak: false });
 
     doc.fillColor(C.white).fontSize(13).font('Helvetica-Bold')
        .text(periodLabel, MR - 160, 30, { width: 110, align: 'right', lineBreak: false });
 
     doc.fillColor('rgba(255,255,255,0.55)').fontSize(8).font('Helvetica')
-       .text(`${totalTx} movimentações`, MR - 160, 50, { width: 110, align: 'right', lineBreak: false });
+       .text(`${totalTx} movimentacoes`, MR - 160, 50, { width: 110, align: 'right', lineBreak: false });
 
     let y = 106;
 
     const boxW    = Math.floor((CW - 16) / 3);
     const boxH    = 58;
     const boxDefs = [
-      { label: 'TOTAL RECEBIDO', value: fmt(totalIncome),  color: C.green, bg: C.greenLight },
-      { label: 'TOTAL GASTO',    value: fmt(totalExpense), color: C.red,   bg: C.redLight   },
+      { label: 'TOTAL ENTRADAS', value: fmt(totalIncome),  color: C.green, bg: C.greenLight },
+      { label: 'TOTAL SAIDAS',    value: fmt(totalExpense), color: C.red,   bg: C.redLight   },
       {
-        label: balance >= 0 ? 'SOBRA DO PERÍODO' : 'FALTA DO PERÍODO',
+        label: balance >= 0 ? 'RESTANTE' : 'FALTA',
         value: fmt(Math.abs(balance)),
         color: balance >= 0 ? C.green : C.red,
         bg:    balance >= 0 ? C.greenLight : C.redLight,
@@ -235,10 +231,8 @@ router.get('/pdf', async (req, res) => {
     const renderTxHeader = (yh) => {
       doc.rect(ML, yh, CW, 20).fill(C.ink);
       [
-        { text: 'Data',      x: COL.date, w: COL.dateW },
-        { text: 'Descrição', x: COL.desc, w: COL.descW },
+        { text: 'Descricao', x: COL.desc, w: COL.descW },
         { text: 'Categoria', x: COL.cat,  w: COL.catW  },
-        { text: 'Conta',     x: COL.acc,  w: COL.accW  },
         { text: 'Valor',     x: COL.amt,  w: COL.amtW, align: 'right' },
       ].forEach(c =>
         doc.fillColor(C.white).fontSize(7.5).font('Helvetica-Bold')
@@ -251,7 +245,7 @@ router.get('/pdf', async (req, res) => {
     };
 
     if (rows.length > 0) {
-      y = sectionHeader(doc, 'Movimentações', y);
+      y = sectionHeader(doc, 'Movimentacoes', y);
       y = renderTxHeader(y);
 
       rows.forEach((tx, i) => {
@@ -259,7 +253,7 @@ router.get('/pdf', async (req, res) => {
           doc.addPage();
           y = 40;
           doc.fillColor(C.gray).fontSize(7.5).font('Helvetica')
-             .text(`Extrato ${periodLabel} — continuação`, ML, 24,
+             .text(`Extrato ${periodLabel} - continuacao`, ML, 24,
                { width: CW, align: 'center', lineBreak: false });
           hLine(doc, 36);
           y = renderTxHeader(y);
@@ -267,27 +261,18 @@ router.get('/pdf', async (req, res) => {
 
         const rowBg    = i % 2 === 0 ? C.white : C.bg;
         const isIncome = tx.type === 'income';
-        const isXfer   = tx.type === 'transfer';
-        const amtColor = isIncome ? C.green : isXfer ? '#d97706' : C.red;
-        const prefix   = isIncome ? '+ ' : isXfer ? '↔ ' : '− ';
+        const amtColor = isIncome ? C.green : C.red;
+        const prefix   = isIncome ? '+ ' : '- ';
 
         doc.rect(ML, y, CW, 18).fill(rowBg);
 
-        doc.fillColor(C.gray).fontSize(8).font('Helvetica')
-           .text(fmtDate(tx.date), COL.date, y + 5,
-             { width: COL.dateW, lineBreak: false });
-
         doc.fillColor(C.ink).fontSize(8).font('Helvetica')
-           .text((tx.description || '').substring(0, 30), COL.desc, y + 5,
+           .text((tx.description || '').substring(0, 45), COL.desc, y + 5,
              { width: COL.descW, lineBreak: false });
 
         doc.fillColor(C.gray).fontSize(7.5).font('Helvetica')
-           .text(tx.category_name || '—', COL.cat, y + 5,
+           .text(tx.category_name || '-', COL.cat, y + 5,
              { width: COL.catW, lineBreak: false });
-
-        doc.fillColor(C.grayLight).fontSize(7.5).font('Helvetica')
-           .text(tx.account_name || '—', COL.acc, y + 5,
-             { width: COL.accW, lineBreak: false });
 
         doc.fillColor(amtColor).fontSize(8.5).font('Helvetica-Bold')
            .text(prefix + fmt(tx.amount), COL.amt, y + 4.5,
@@ -303,25 +288,25 @@ router.get('/pdf', async (req, res) => {
       doc.rect(ML, y, CW, 30).fill(C.bg);
 
       doc.fillColor(C.ink).fontSize(8.5).font('Helvetica-Bold')
-         .text('Total do Período', ML + 10, y + 10, { lineBreak: false });
+         .text('Total do Periodo', ML + 10, y + 10, { lineBreak: false });
 
       doc.fillColor(C.green).fontSize(8.5).font('Helvetica-Bold')
          .text(`Entradas: ${fmt(totalIncome)}`, ML + 160, y + 5,
            { width: 150, align: 'right', lineBreak: false });
 
       doc.fillColor(C.red).fontSize(8.5).font('Helvetica-Bold')
-         .text(`Saídas: ${fmt(totalExpense)}`, ML + 160, y + 18,
+         .text(`Saidas: ${fmt(totalExpense)}`, ML + 160, y + 18,
            { width: 150, align: 'right', lineBreak: false });
 
       doc.fillColor(balance >= 0 ? C.green : C.red).fontSize(10).font('Helvetica-Bold')
-         .text(`Sobra: ${fmt(balance)}`, MR - 110, y + 10,
+         .text(`Restante: ${fmt(balance)}`, MR - 110, y + 10,
            { width: 110, align: 'right', lineBreak: false });
 
       y += 30;
     } else {
       y += 8;
       doc.fillColor(C.gray).fontSize(10).font('Helvetica')
-         .text('Nenhuma movimentação registrada no período.', ML, y,
+         .text('Nenhuma movimentacao registrada no periodo.', ML, y,
            { width: CW, align: 'center' });
       y += 20;
     }
@@ -333,7 +318,7 @@ router.get('/pdf', async (req, res) => {
       hLine(doc, footerY - 8, ML, MR, C.line, 0.4);
       doc.fillColor(C.grayLight).fontSize(7).font('Helvetica')
          .text(
-           `Me Poupa  ·  Gerado em ${new Date().toLocaleString('pt-BR')}  ·  Página ${i + 1} de ${pages.count}`,
+           `Me Poupa  -  Gerado em ${new Date().toLocaleString('pt-BR')}  -  Pagina ${i + 1} de ${pages.count}`,
            ML, footerY, { width: CW, align: 'center', lineBreak: false }
          );
     }
@@ -343,7 +328,7 @@ router.get('/pdf', async (req, res) => {
   } catch (err) {
     console.error('Erro ao gerar PDF:', err);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Erro ao gerar relatório PDF' });
+      res.status(500).json({ error: 'Erro ao gerar relatorio PDF' });
     }
   }
 });

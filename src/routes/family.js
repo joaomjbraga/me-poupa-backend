@@ -54,11 +54,6 @@ router.post('/join', async (req, res) => {
     );
 
     await query(
-      'UPDATE accounts SET family_id = $1 WHERE user_id = $2',
-      [familyId, currentUserId]
-    );
-
-    await query(
       'UPDATE transactions SET family_id = $1 WHERE user_id = $2',
       [familyId, currentUserId]
     );
@@ -121,11 +116,6 @@ router.post('/leave', async (req, res) => {
 
     await query(
       'UPDATE categories SET family_id = NULL WHERE user_id = $1',
-      [req.userId]
-    );
-
-    await query(
-      'UPDATE accounts SET family_id = NULL WHERE user_id = $1',
       [req.userId]
     );
 

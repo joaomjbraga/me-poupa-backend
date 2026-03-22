@@ -15,7 +15,7 @@ function getFamilyFilter(userId, familyId, params, idx) {
 }
 
 router.get('/', async (req, res) => {
-  const { month, year, type, category_id, account_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
+  const { month, year, type, category_id, date_from, date_to, limit = 50, offset = 0 } = req.query;
 
   try {
     const userResult = await query('SELECT family_id FROM users WHERE id = $1', [req.userId]);
@@ -25,11 +25,9 @@ router.get('/', async (req, res) => {
     let sql = `
       SELECT t.*, 
         c.name as category_name, c.icon as category_icon, c.color as category_color,
-        a.name as account_name, a.icon as account_icon,
         u.name as user_name, u.avatar_color as user_color
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
-      LEFT JOIN accounts a ON t.account_id = a.id
       LEFT JOIN users u ON t.user_id = u.id
       WHERE ${familyFilter.filter}
     `;
@@ -50,7 +48,6 @@ router.get('/', async (req, res) => {
     }
     if (type) { sql += ` AND t.type = $${idx++}`; params.push(type); }
     if (category_id) { sql += ` AND t.category_id = $${idx++}`; params.push(category_id); }
-    if (account_id) { sql += ` AND t.account_id = $${idx++}`; params.push(account_id); }
 
     sql += ` ORDER BY t.date DESC, t.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limit, offset);
@@ -166,12 +163,10 @@ router.get('/export', async (req, res) => {
         t.description,
         t.type,
         COALESCE(c.name, 'Sem categoria') as category_name,
-        COALESCE(a.name, 'Sem conta') as account_name,
         t.amount,
         u.name as user_name
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
-      LEFT JOIN accounts a ON t.account_id = a.id
       LEFT JOIN users u ON t.user_id = u.id
       WHERE ${familyFilter.filter}
     `;
@@ -195,10 +190,10 @@ router.get('/export', async (req, res) => {
 
     const result = await query(sql, params);
 
-    const headers = 'Data,Descrição,Tipo,Categoria,Conta,Valor,Usuário\n';
+    const headers = 'Data,Descricao,Tipo,Categoria,Valor,Usuario\n';
     const rows = result.rows.map(t => {
-      const typeLabel = t.type === 'income' ? 'Entrada' : 'Saída';
-      return `"${t.date}","${t.description}","${typeLabel}","${t.category_name}","${t.account_name}","${t.amount}","${t.user_name || ''}"`;
+      const typeLabel = t.type === 'income' ? 'Entrada' : 'Saida';
+      return `"${t.date}","${t.description}","${typeLabel}","${t.category_name}","${t.amount}","${t.user_name || ''}"`;
     }).join('\n');
 
     const filename = date_from && date_to ? `transacoes-${date_from}-${date_to}` : `transacoes-${m}-${y}`;
@@ -207,12 +202,12 @@ router.get('/export', async (req, res) => {
     res.send(headers + rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erro ao exportar transações' });
+    res.status(500).json({ error: 'Erro ao exportar transacoes' });
   }
 });
 
 router.post('/', validateBody(async (schema) => schema), async (req, res) => {
-  const { account_id, category_id, type, amount, description, date, notes, is_recurring, recurring_interval } = req.body;
+  const { category_id, type, amount, description, date, notes } = req.body;
 
   try {
     const userResult = await query('SELECT name, family_id FROM users WHERE id = $1', [req.userId]);
@@ -220,18 +215,10 @@ router.post('/', validateBody(async (schema) => schema), async (req, res) => {
     const familyId = user.family_id;
 
     const result = await query(`
-      INSERT INTO transactions (user_id, family_id, account_id, category_id, type, amount, description, date, notes, is_recurring, recurring_interval)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO transactions (user_id, family_id, category_id, type, amount, description, date, notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [req.userId, familyId, account_id || null, category_id || null, type, amount, description, date, notes || null, is_recurring || false, recurring_interval || null]);
-
-    if (account_id && type !== 'transfer') {
-      const balanceChange = type === 'income' ? amount : -amount;
-      await query(
-        'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-        [balanceChange, account_id]
-      );
-    }
+    `, [req.userId, familyId, category_id || null, type, amount, description, date, notes || null]);
 
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
@@ -245,12 +232,12 @@ router.post('/', validateBody(async (schema) => schema), async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erro ao criar transação' });
+    res.status(500).json({ error: 'Erro ao criar transacao' });
   }
 });
 
 router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
-  const { account_id, category_id, type, amount, description, date, notes } = req.body;
+  const { category_id, type, amount, description, date, notes } = req.body;
 
   try {
     const userResult = await query('SELECT name, family_id FROM users WHERE id = $1', [req.userId]);
@@ -261,24 +248,12 @@ router.put('/:id', validateBody(async (schema) => schema), async (req, res) => {
       'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
-    if (original.rows.length === 0) return res.status(404).json({ error: 'Transação não encontrada' });
-
-    const orig = original.rows[0];
-
-    if (orig.account_id && orig.type !== 'transfer') {
-      const reversal = orig.type === 'income' ? -orig.amount : orig.amount;
-      await query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [reversal, orig.account_id]);
-    }
+    if (original.rows.length === 0) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
     const result = await query(`
-      UPDATE transactions SET account_id=$1, category_id=$2, type=$3, amount=$4, description=$5, date=$6, notes=$7
-      WHERE id=$8 AND user_id=$9 RETURNING *
-    `, [account_id || null, category_id || null, type, amount, description, date, notes || null, req.params.id, req.userId]);
-
-    if (account_id && type !== 'transfer') {
-      const balanceChange = type === 'income' ? amount : -amount;
-      await query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [balanceChange, account_id]);
-    }
+      UPDATE transactions SET category_id=$1, type=$2, amount=$3, description=$4, date=$5, notes=$6
+      WHERE id=$7 AND user_id=$8 RETURNING *
+    `, [category_id || null, type, amount, description, date, notes || null, req.params.id, req.userId]);
 
     const io = req.app.get('io');
     const userSockets = req.app.get('userSockets');
@@ -306,13 +281,9 @@ router.delete('/:id', async (req, res) => {
       'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
-    if (orig.rows.length === 0) return res.status(404).json({ error: 'Transação não encontrada' });
+    if (orig.rows.length === 0) return res.status(404).json({ error: 'Transacao nao encontrada' });
 
     const t = orig.rows[0];
-    if (t.account_id && t.type !== 'transfer') {
-      const reversal = t.type === 'income' ? -t.amount : t.amount;
-      await query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [reversal, t.account_id]);
-    }
 
     await query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
 
