@@ -182,7 +182,7 @@ io.on('connection', async (socket) => {
   const token = socket.handshake.auth.token;
   
   if (!token) {
-    socket.emit('connect_error', { message: 'Token não fornecido' });
+    socket.emit('auth_error', { message: 'Token não fornecido' });
     socket.disconnect(true);
     return;
   }
@@ -192,14 +192,14 @@ io.on('connection', async (socket) => {
     const { userId, familyId } = decoded;
     
     if (!userId) {
-      socket.emit('connect_error', { message: 'Token inválido' });
+      socket.emit('auth_error', { message: 'Token inválido' });
       socket.disconnect(true);
       return;
     }
 
     const result = await query('SELECT id, family_id FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
-      socket.emit('connect_error', { message: 'Usuário não encontrado' });
+      socket.emit('auth_error', { message: 'Usuário não encontrado' });
       socket.disconnect(true);
       return;
     }
@@ -218,7 +218,7 @@ io.on('connection', async (socket) => {
     }
     
   } catch (err) {
-    socket.emit('connect_error', { message: 'Token inválido ou expirado' });
+    socket.emit('auth_error', { message: 'Token inválido ou expirado' });
     socket.disconnect(true);
   }
 
