@@ -12,6 +12,7 @@
     <img src="https://img.shields.io/badge/demo-ao%20vivo-4CAF50?style=for-the-badge&logo=vercel&logoColor=white" alt="Demo" />
   </a>
   <img src="https://img.shields.io/badge/node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/typescript-5.0+-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/licença-MIT-yellow?style=for-the-badge" alt="MIT" />
@@ -63,10 +64,10 @@ A API oferece uma base sólida para aplicações de gestão financeira compartil
 | Tecnologia | Finalidade |
 |---|---|
 | **Node.js + Express** | Framework principal da API |
+| **TypeScript** | Tipagem estática para melhor DX e menos erros |
 | **PostgreSQL** | Banco de dados relacional |
 | **JWT + Cookies httpOnly** | Autenticação segura sem exposição de token |
 | **bcryptjs** | Hash de senhas com 12 rounds |
-| **Zod** | Validação e tipagem de schemas |
 | **Socket.IO** | Notificações em tempo real |
 | **Helmet.js** | Proteção via headers HTTP |
 | **pdfkit** | Geração de relatórios PDF |
@@ -247,7 +248,8 @@ Novo usuário
 | **Cookies httpOnly** | JWT inacessível via JavaScript — protegido contra XSS |
 | **Helmet.js** | Headers de segurança: CSP, X-Frame-Options, HSTS e outros |
 | **Rate Limiting** | 500 req/15min geral · 20 req/15min nas rotas de autenticação |
-| **Zod** | Validação e sanitização de todos os inputs da API |
+| **TypeScript** | Tipagem estática em toda a codebase |
+| **Validação Custom** | Validação e sanitização de todos os inputs da API |
 | **CORS** | Origins restritas e configuráveis via variável de ambiente |
 | **bcrypt** | Hash de senhas com 12 rounds |
 | **JWT** | Tokens com expiração configurável e renovação controlada |
@@ -271,30 +273,33 @@ me-poupa-backend/
 │
 ├── src/
 │   ├── db/
-│   │   ├── pool.js              # Conexão com o PostgreSQL
-│   │   └── init.sql             # Schema e dados iniciais do banco
+│   │   └── pool.ts             # Conexão com o PostgreSQL
 │   │
 │   ├── middleware/
-│   │   ├── auth.js              # Autenticação via JWT + cookies
-│   │   ├── rateLimiter.js       # Controle de taxa de requisições
-│   │   └── validate.js          # Validação de inputs com Zod
+│   │   ├── auth.ts             # Autenticação via JWT + cookies
+│   │   ├── rateLimiter.ts      # Controle de taxa de requisições
+│   │   └── validate.ts          # Validação de inputs
 │   │
 │   ├── routes/
-│   │   ├── auth.js              # Autenticação e perfil
-│   │   ├── transactions.js      # CRUD de transações
-│   │   ├── resources.js         # Categorias
-│   │   ├── family.js            # Grupos familiares
-│   │   ├── notifications.js     # Notificações
-│   │   └── reports.js           # Geração de PDF
+│   │   ├── auth.ts             # Autenticação e perfil
+│   │   ├── transactions.ts     # CRUD de transações
+│   │   ├── resources.ts        # Categorias
+│   │   ├── family.ts           # Grupos familiares
+│   │   ├── notifications.ts    # Notificações
+│   │   └── reports.ts          # Geração de PDF
 │   │
 │   ├── utils/
-│   │   └── socketHelpers.js     # Helpers para eventos Socket.IO
+│   │   └── socketHelpers.ts    # Helpers para eventos Socket.IO
 │   │
-│   └── index.js                 # Entry point da aplicação
+│   ├── types/
+│   │   └── index.ts            # Tipos TypeScript
+│   │
+│   └── index.ts                # Entry point da aplicação
 │
-├── .env.example                 # Modelo de variáveis de ambiente
-├── docker-compose.yml           # Orquestração dos serviços
-├── Dockerfile                   # Imagem da aplicação
+├── tsconfig.json               # Configuração do TypeScript
+├── .env.example                # Modelo de variáveis de ambiente
+├── docker-compose.yml          # Orquestração dos serviços
+├── Dockerfile                  # Imagem da aplicação
 └── package.json
 ```
 
@@ -303,8 +308,10 @@ me-poupa-backend/
 ## 📜 Scripts Disponíveis
 
 ```bash
-npm start      # Iniciar em produção
-npm run dev    # Iniciar em desenvolvimento (com hot reload via nodemon)
+npm run typecheck  # Verificar tipos TypeScript
+npm run build      # Compilar TypeScript para JavaScript
+npm start          # Iniciar em produção (usa dist/)
+npm run dev        # Iniciar em desenvolvimento (com ts-node/esm)
 ```
 
 ---

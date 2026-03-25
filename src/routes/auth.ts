@@ -1,18 +1,26 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { Secret } from 'jsonwebtoken';
 import { query } from '../db/pool.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
-import { emitFamilyUpdate } from '../utils/socketHelpers.js';
+import { emitToFamily } from '../utils/socketHelpers.js';
+import type { Server as SocketServer } from 'socket.io';
+import type { DbRow } from '../db/pool.js';
 
 const router = express.Router();
 const isProduction = process.env.NODE_ENV === 'production';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-const DEFAULT_CATEGORIES = [
+interface DefaultCategory {
+  name: string;
+  icon: string;
+  color: string;
+  type: 'income' | 'expense';
+}
+
+const _DEFAULT_CATEGORIES: DefaultCategory[] = [
   { name: 'Salário', icon: '💼', color: '#22c55e', type: 'income' },
   { name: 'Extra', icon: '💰', color: '#16a34a', type: 'income' },
   { name: 'Comida', icon: '🍽️', color: '#ef4444', type: 'expense' },
@@ -25,8 +33,8 @@ const DEFAULT_CATEGORIES = [
   { name: 'Calçados', icon: '👟', color: '#06b6d4', type: 'expense' },
 ];
 
-function validatePassword(password) {
-  const errors = [];
+function validatePassword(password: string): string[] {
+  const errors: string[] = [];
   if (password.length < PASSWORD_MIN_LENGTH) {
     errors.push(`Senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres`);
   }
@@ -42,45 +50,53 @@ function validatePassword(password) {
   return errors;
 }
 
-function createToken(user) {
-  return jwt.sign(
-    { userId: user.id, familyId: user.family_id },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
+interface TokenPayload {
+  userId: string;
+  familyId: string | null;
+}
+
+function createToken(user: { id: string; family_id: string | null }): string {
+  const payload: TokenPayload = { userId: user.id, familyId: user.family_id };
+  const secret = (process.env.JWT_SECRET || 'default-secret') as Secret;
+  return jwt.sign(payload, secret);
 }
 
 router.post('/register', authLimiter, async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password } = req.body as { name?: string; email?: string; password?: string };
 
   if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    return;
   }
 
   if (name.trim().length < 2) {
-    return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+    res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+    return;
   }
 
   if (!EMAIL_REGEX.test(email)) {
-    return res.status(400).json({ error: 'Email inválido' });
+    res.status(400).json({ error: 'Email inválido' });
+    return;
   }
 
   const passwordErrors = validatePassword(password);
   if (passwordErrors.length > 0) {
-    return res.status(400).json({ error: passwordErrors.join('; ') });
+    res.status(400).json({ error: passwordErrors.join('; ') });
+    return;
   }
 
   try {
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    const existing = await query<DbRow>('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Email já cadastrado' });
+      res.status(409).json({ error: 'Email já cadastrado' });
+      return;
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const colors = ['#22c55e', '#16a34a', '#f59e0b', '#ef4444', '#ec4899', '#f97316'];
     const avatarColor = colors[Math.floor(Math.random() * colors.length)];
 
-    const userResult = await query(
+    const userResult = await query<DbRow>(
       `INSERT INTO users (name, email, password_hash, avatar_color, invite_code) 
        VALUES ($1, $2, $3, $4, gen_random_uuid()) 
        RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at`,
@@ -89,7 +105,16 @@ router.post('/register', authLimiter, async (req, res) => {
 
     const user = userResult.rows[0];
 
-    const token = createToken(user);
+    for (const cat of _DEFAULT_CATEGORIES) {
+      await query(
+        'INSERT INTO categories (user_id, name, icon, color, type) VALUES ($1, $2, $3, $4, $5)',
+        [user.id as string, cat.name, cat.icon, cat.color, cat.type]
+      );
+    }
+
+    const userId = user.id as string;
+    const userFamilyId = user.family_id as string | null;
+    const token = createToken({ id: userId, family_id: userFamilyId });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -107,30 +132,33 @@ router.post('/register', authLimiter, async (req, res) => {
 });
 
 router.post('/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body as { email?: string; password?: string };
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    return;
   }
 
   try {
-    const result = await query(
+    const result = await query<DbRow>(
       'SELECT id, name, email, password_hash, avatar_color, avatar_image, family_id, invite_code, created_at FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Email ou senha incorretos' });
+      res.status(401).json({ error: 'Email ou senha incorretos' });
+      return;
     }
 
     const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, user.password_hash as string);
 
     if (!valid) {
-      return res.status(401).json({ error: 'Email ou senha incorretos' });
+      res.status(401).json({ error: 'Email ou senha incorretos' });
+      return;
     }
 
-    const token = createToken(user);
+    const token = createToken({ id: user.id as string, family_id: user.family_id as string | null });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -141,29 +169,37 @@ router.post('/login', authLimiter, async (req, res) => {
     });
 
     const { password_hash, ...userWithoutPassword } = user;
-    res.json({ token, user: userWithoutPassword });
+    const newToken = createToken({ id: user.id as string, family_id: user.family_id as string | null });
+    res.json({ token: newToken, user: userWithoutPassword });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', (_req, res) => {
   res.clearCookie('token', { path: '/' });
   res.json({ message: 'Logout realizado' });
 });
 
 router.get('/me', async (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.substring(7);
-  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  if (!token) {
+    res.status(401).json({ error: 'Não autorizado' });
+    return;
+  }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const result = await query(
+    const secret: Secret = process.env.JWT_SECRET || 'default-secret';
+    const decoded = jwt.verify(token, secret) as TokenPayload;
+    const result = await query<DbRow>(
       'SELECT id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at FROM users WHERE id = $1',
       [decoded.userId]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Usuário não encontrado' });
+      return;
+    }
     res.json(result.rows[0]);
   } catch {
     res.status(401).json({ error: 'Token inválido' });
@@ -172,36 +208,47 @@ router.get('/me', async (req, res) => {
 
 router.put('/profile', async (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.substring(7);
-  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  if (!token) {
+    res.status(401).json({ error: 'Não autorizado' });
+    return;
+  }
 
-  const { name, avatar_color, avatar_image } = req.body;
+  const { name, avatar_color, avatar_image } = req.body as { name?: string; avatar_color?: string; avatar_image?: string };
 
   if (!name || name.trim().length < 2) {
-    return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+    res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
+    return;
   }
 
   if (name.trim().length > 100) {
-    return res.status(400).json({ error: 'Nome muito longo' });
+    res.status(400).json({ error: 'Nome muito longo' });
+    return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret: Secret = process.env.JWT_SECRET || 'default-secret';
+    const decoded = jwt.verify(token, secret) as TokenPayload;
     
-    const userResult = await query('SELECT family_id FROM users WHERE id = $1', [decoded.userId]);
-    const familyId = userResult.rows[0]?.family_id;
+    const userResult = await query<DbRow>('SELECT family_id FROM users WHERE id = $1', [decoded.userId]);
+    const familyId = userResult.rows[0]?.family_id as string | null;
     
-    const result = await query(
+    const result = await query<DbRow>(
       'UPDATE users SET name = $1, avatar_color = COALESCE($2, avatar_color), avatar_image = $3 WHERE id = $4 RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at',
       [name.trim(), avatar_color, avatar_image, decoded.userId]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Usuário não encontrado' });
+      return;
+    }
     
-    const io = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
-    emitFamilyUpdate(io, userSockets, familyId, {
-      type: 'member_updated',
-      user: result.rows[0]
-    });
+    const io = req.app.get('io') as SocketServer;
+    const userSockets = req.app.get('userSockets') as Map<string, string>;
+    if (familyId) {
+      emitToFamily(io, userSockets, familyId, 'family_update', {
+        type: 'member_updated',
+        user: result.rows[0]
+      });
+    }
     
     res.json(result.rows[0]);
   } catch (err) {
@@ -212,27 +259,36 @@ router.put('/profile', async (req, res) => {
 
 router.put('/email', async (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.substring(7);
-  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  if (!token) {
+    res.status(401).json({ error: 'Não autorizado' });
+    return;
+  }
 
-  const { email } = req.body;
+  const { email } = req.body as { email?: string };
 
   if (!email || !EMAIL_REGEX.test(email)) {
-    return res.status(400).json({ error: 'Email inválido' });
+    res.status(400).json({ error: 'Email inválido' });
+    return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret: Secret = process.env.JWT_SECRET || 'default-secret';
+    const decoded = jwt.verify(token, secret) as TokenPayload;
     
-    const existing = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email.toLowerCase(), decoded.userId]);
+    const existing = await query<DbRow>('SELECT id FROM users WHERE email = $1 AND id != $2', [email.toLowerCase(), decoded.userId]);
     if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Este email já está em uso' });
+      res.status(409).json({ error: 'Este email já está em uso' });
+      return;
     }
 
-    const result = await query(
+    const result = await query<DbRow>(
       'UPDATE users SET email = $1 WHERE id = $2 RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at',
       [email.toLowerCase(), decoded.userId]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Usuário não encontrado' });
+      return;
+    }
     res.json(result.rows[0]);
   } catch {
     res.status(401).json({ error: 'Token inválido' });
@@ -241,30 +297,38 @@ router.put('/email', async (req, res) => {
 
 router.put('/password', async (req, res) => {
   const token = req.cookies?.token || req.headers.authorization?.substring(7);
-  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  if (!token) {
+    res.status(401).json({ error: 'Não autorizado' });
+    return;
+  }
 
-  const { current_password, new_password } = req.body;
+  const { current_password, new_password } = req.body as { current_password?: string; new_password?: string };
 
   if (!current_password || !new_password) {
-    return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
+    res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
+    return;
   }
 
   const passwordErrors = validatePassword(new_password);
   if (passwordErrors.length > 0) {
-    return res.status(400).json({ error: passwordErrors.join('; ') });
+    res.status(400).json({ error: passwordErrors.join('; ') });
+    return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret: Secret = process.env.JWT_SECRET || 'default-secret';
+    const decoded = jwt.verify(token, secret) as TokenPayload;
     
-    const userResult = await query('SELECT password_hash FROM users WHERE id = $1', [decoded.userId]);
+    const userResult = await query<DbRow>('SELECT password_hash FROM users WHERE id = $1', [decoded.userId]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
+      res.status(404).json({ error: 'Usuário não encontrado' });
+      return;
     }
 
-    const valid = await bcrypt.compare(current_password, userResult.rows[0].password_hash);
+    const valid = await bcrypt.compare(current_password, userResult.rows[0].password_hash as string);
     if (!valid) {
-      return res.status(401).json({ error: 'Senha atual incorreta' });
+      res.status(401).json({ error: 'Senha atual incorreta' });
+      return;
     }
 
     const newHash = await bcrypt.hash(new_password, 12);

@@ -11,7 +11,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mepoupa_user -d mepoupa_casa"]
       interval: 10s
@@ -28,11 +27,13 @@ services:
     environment:
       DATABASE_URL: postgresql://mepoupa_user:mepoupa_pass@postgres:5432/mepoupa_casa
       PORT: 3001
+      NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3001:3001"
     volumes:
       - .:/app
+      - /app/node_modules
     command: npm run dev
 
 volumes:

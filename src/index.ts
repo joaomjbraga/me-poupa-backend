@@ -4,8 +4,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
-import jwt from 'jsonwebtoken';
+import { Server as SocketServer } from 'socket.io';
+import jwt, { Secret } from 'jsonwebtoken';
 import { generalLimiter } from './middleware/rateLimiter.js';
 import authRouter from './routes/auth.js';
 import transactionsRouter from './routes/transactions.js';
@@ -14,8 +14,9 @@ import familyRouter from './routes/family.js';
 import reportsRouter from './routes/reports.js';
 import notificationsRouter from './routes/notifications.js';
 import { query } from './db/pool.js';
+import type { UserSocketMap } from './utils/socketHelpers.js';
 
-async function initDatabase() {
+async function initDatabase(): Promise<void> {
   const createTables = `
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,15 +85,15 @@ async function initDatabase() {
     await query(createTables);
     console.log('✅ Tabelas verificadas/criadas');
   } catch (err) {
-    console.error('Erro ao criar tabelas:', err.message);
+    console.error('Erro ao criar tabelas:', (err as Error).message);
   }
 
   try {
     await query(createIndexes);
     console.log('✅ Índices verificados/criados');
   } catch (err) {
-    if (err.code !== '42P07') {
-      console.error('Erro ao criar índices:', err.message);
+    if ((err as { code?: string }).code !== '42P07') {
+      console.error('Erro ao criar índices:', (err as Error).message);
     }
   }
 
@@ -112,7 +113,7 @@ async function initDatabase() {
     await query(`CREATE TRIGGER transactions_updated_at BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE FUNCTION update_updated_at()`);
     console.log('✅ Triggers verificados/criados');
   } catch (err) {
-    console.error('Erro ao criar triggers:', err.message);
+    console.error('Erro ao criar triggers:', (err as Error).message);
   }
 }
 
@@ -120,13 +121,12 @@ const app = express();
 const httpServer = createServer(app);
 
 const isProduction = process.env.NODE_ENV === 'production';
-const isHttps = process.env.HTTPS_ENABLED === 'true' || isProduction;
 
 app.set('trust proxy', 1);
 
 const allowedOrigins = (() => {
-  const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean);
-  if (envOrigins?.length > 0) return envOrigins;
+  const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
+  if (envOrigins.length > 0) return envOrigins;
   if (!isProduction) return ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
   console.warn('⚠️ ALLOWED_ORIGINS não configurado em produção!');
   return [];
@@ -135,7 +135,7 @@ const allowedOrigins = (() => {
 const PORT = process.env.PORT || 3001;
 
 const corsOptions = {
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: Origin ${origin} não permitida`));
@@ -145,7 +145,7 @@ const corsOptions = {
   credentials: true
 };
 
-const io = new Server(httpServer, {
+const io = new SocketServer(httpServer, {
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -173,8 +173,8 @@ app.use(cookieParser());
 
 app.use('/api', generalLimiter);
 
-const userSockets = new Map();
-const userMessageCount = new Map();
+const userSockets: UserSocketMap = new Map();
+const userMessageCount = new Map<string, { count: number; resetTime: number }>();
 const MESSAGE_RATE_LIMIT = 100;
 const MESSAGE_RATE_WINDOW = 60000;
 
@@ -188,7 +188,8 @@ io.on('connection', async (socket) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret: Secret = process.env.JWT_SECRET || 'default-secret';
+    const decoded = jwt.verify(token, secret) as { userId: string; familyId?: string | null };
     const { userId, familyId } = decoded;
     
     if (!userId) {
@@ -197,7 +198,7 @@ io.on('connection', async (socket) => {
       return;
     }
 
-    const result = await query('SELECT id, family_id FROM users WHERE id = $1', [userId]);
+    const result = await query<{ id: string; family_id: string | null }>('SELECT id, family_id FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
       socket.emit('auth_error', { message: 'Usuário não encontrado' });
       socket.disconnect(true);
@@ -217,13 +218,13 @@ io.on('connection', async (socket) => {
       socket.join(`family:${actualFamilyId}`);
     }
     
-  } catch (err) {
+  } catch {
     socket.emit('auth_error', { message: 'Token inválido ou expirado' });
     socket.disconnect(true);
   }
 
   socket.on('disconnect', () => {
-    const userId = socket.data?.userId;
+    const userId = socket.data?.userId as string | undefined;
     if (userId) {
       userSockets.delete(userId);
       userMessageCount.delete(userId);
@@ -231,7 +232,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('message', () => {
-    const userId = socket.data?.userId;
+    const userId = socket.data?.userId as string | undefined;
     if (!userId) return;
 
     const rateData = userMessageCount.get(userId);
@@ -246,7 +247,6 @@ io.on('connection', async (socket) => {
     rateData.count++;
     if (rateData.count > MESSAGE_RATE_LIMIT) {
       socket.emit('rate_limited', { message: 'Muitas mensagens. Tente novamente em alguns segundos.' });
-      return;
     }
   });
 });
@@ -263,7 +263,7 @@ app.use('/api/family', familyRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/notifications', notificationsRouter);
 
-app.get('/api/health', (_, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);

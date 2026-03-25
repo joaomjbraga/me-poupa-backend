@@ -1,56 +1,75 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { Secret } from 'jsonwebtoken';
 import { query } from '../db/pool.js';
-import { authenticate } from '../middleware/auth.js';
-import { emitFamilyUpdate, emitToUser } from '../utils/socketHelpers.js';
+import type { DbRow } from '../db/pool.js';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth.js';
+import { emitToFamily } from '../utils/socketHelpers.js';
+import type { Server as SocketServer } from 'socket.io';
+import type { UserSocketMap } from '../utils/socketHelpers.js';
 
 const router = express.Router();
 router.use(authenticate);
 
-function createToken(user) {
-  return jwt.sign(
-    { userId: user.id, familyId: user.family_id },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+interface TokenPayload {
+  userId: string;
+  familyId: string | null;
+}
+
+function createToken(user: { id: string; family_id: string | null }): string {
+  const payload: TokenPayload = { userId: user.id, familyId: user.family_id };
+  const secret = (process.env.JWT_SECRET || 'default-secret') as Secret;
+  return jwt.sign(payload, secret);
+}
+
+async function getFamilyMembers(familyId: string): Promise<DbRow[]> {
+  if (!familyId) return [];
+  const result = await query<DbRow>(
+    'SELECT id, name, email, avatar_color, avatar_image FROM users WHERE family_id = $1',
+    [familyId]
   );
+  return result.rows;
 }
 
 router.post('/join', async (req, res) => {
-  const { invite_code } = req.body;
+  const userId = (req as AuthenticatedRequest).userId;
+  const { invite_code } = req.body as { invite_code?: string };
 
   if (!invite_code) {
-    return res.status(400).json({ error: 'Código de convite é obrigatório' });
+    res.status(400).json({ error: 'Código de convite é obrigatório' });
+    return;
   }
 
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_REGEX.test(invite_code)) {
-    return res.status(400).json({ error: 'Código de convite inválido' });
+    res.status(400).json({ error: 'Código de convite inválido' });
+    return;
   }
 
   try {
-    const hostUser = await query(
+    const hostUser = await query<DbRow>(
       'SELECT id, name, family_id FROM users WHERE invite_code = $1',
       [invite_code]
     );
 
     if (hostUser.rows.length === 0) {
-      return res.status(404).json({ error: 'Código de convite inválido' });
+      res.status(404).json({ error: 'Código de convite inválido' });
+      return;
     }
 
     const host = hostUser.rows[0];
-    const currentUserId = req.userId;
 
-    if (host.id === currentUserId) {
-      return res.status(400).json({ error: 'Você não pode entrar na sua própria família' });
+    if (host.id === userId) {
+      res.status(400).json({ error: 'Você não pode entrar na sua própria família' });
+      return;
     }
 
-    const currentUserResult = await query(
+    const currentUserResult = await query<DbRow>(
       'SELECT name FROM users WHERE id = $1',
-      [currentUserId]
+      [userId]
     );
     const currentUser = currentUserResult.rows[0];
 
-    let familyId = host.family_id;
+    let familyId = host.family_id as string | null;
 
     if (!familyId) {
       familyId = crypto.randomUUID();
@@ -59,35 +78,37 @@ router.post('/join', async (req, res) => {
 
     await query(
       'UPDATE users SET family_id = $1 WHERE id = $2',
-      [familyId, currentUserId]
+      [familyId, userId]
     );
 
     await query(
       'UPDATE categories SET family_id = $1 WHERE user_id = $2',
-      [familyId, currentUserId]
+      [familyId, userId]
     );
 
     await query(
       'UPDATE transactions SET family_id = $1 WHERE user_id = $2',
-      [familyId, currentUserId]
+      [familyId, userId]
     );
 
-    const io = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
+    const io = req.app.get('io') as SocketServer;
+    const userSockets = req.app.get('userSockets') as UserSocketMap;
 
-    emitFamilyUpdate(io, userSockets, familyId, currentUserId, {
-      type: 'member_joined',
-      userId: currentUserId,
-      userName: currentUser.name,
-      members: await getFamilyMembers(familyId)
-    });
+    if (familyId) {
+      emitToFamily(io, userSockets, familyId, 'family_update', {
+        type: 'member_joined',
+        userId,
+        userName: currentUser.name,
+        members: await getFamilyMembers(familyId)
+      });
+    }
 
-    const updatedUser = await query(
+    const updatedUser = await query<DbRow>(
       'SELECT id, name, email, avatar_color, avatar_image, family_id, invite_code FROM users WHERE id = $1',
-      [currentUserId]
+      [userId]
     );
 
-    const newToken = createToken(updatedUser.rows[0]);
+    const newToken = createToken({ id: updatedUser.rows[0].id as string, family_id: updatedUser.rows[0].family_id as string | null });
 
     res.json({
       message: 'Você entrou na família com sucesso!',
@@ -101,63 +122,66 @@ router.post('/join', async (req, res) => {
 });
 
 router.post('/leave', async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId;
   try {
-    const userResult = await query(
+    const userResult = await query<DbRow>(
       'SELECT id, name, family_id FROM users WHERE id = $1',
-      [req.userId]
+      [userId]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
+      res.status(404).json({ error: 'Usuário não encontrado' });
+      return;
     }
 
     const user = userResult.rows[0];
 
     if (!user.family_id) {
-      return res.status(400).json({ error: 'Você não faz parte de uma família' });
+      res.status(400).json({ error: 'Você não faz parte de uma família' });
+      return;
     }
 
-    const familyId = user.family_id;
-    const remainingMembers = await query(
+    const familyId = user.family_id as string;
+    const remainingMembers = await query<DbRow>(
       'SELECT COUNT(*) as count FROM users WHERE family_id = $1 AND id != $2',
-      [familyId, req.userId]
+      [familyId, userId]
     );
 
-    const io = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
+    const io = req.app.get('io') as SocketServer;
+    const userSockets = req.app.get('userSockets') as UserSocketMap;
 
     await query(
       'UPDATE users SET family_id = NULL WHERE id = $1',
-      [req.userId]
+      [userId]
     );
 
     await query(
       'UPDATE categories SET family_id = NULL WHERE user_id = $1',
-      [req.userId]
+      [userId]
     );
 
     await query(
       'UPDATE transactions SET family_id = NULL WHERE user_id = $1',
-      [req.userId]
+      [userId]
     );
 
-    if (parseInt(remainingMembers.rows[0].count) === 0) {
+    if (parseInt(remainingMembers.rows[0].count as string) === 0) {
       await query('UPDATE users SET family_id = NULL WHERE family_id = $1', [familyId]);
-    } else {
-      emitFamilyUpdate(io, userSockets, familyId, req.userId, {
+    } else if (familyId) {
+      emitToFamily(io, userSockets, familyId, 'family_update', {
         type: 'member_left',
-        userId: req.userId,
+        userId,
         userName: user.name,
         members: await getFamilyMembers(familyId)
       });
     }
 
-    const updatedUser = await query(
+    const updatedUser = await query<DbRow>(
       'SELECT id, name, email, avatar_color, avatar_image, family_id, invite_code FROM users WHERE id = $1',
-      [req.userId]
+      [userId]
     );
 
-    const newToken = createToken(updatedUser.rows[0]);
+    const newToken = createToken({ id: updatedUser.rows[0].id as string, family_id: updatedUser.rows[0].family_id as string | null });
 
     res.json({
       message: 'Você saiu da família com sucesso!',
@@ -171,10 +195,11 @@ router.post('/leave', async (req, res) => {
 });
 
 router.get('/members', async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId;
   try {
-    const result = await query(
+    const result = await query<DbRow>(
       'SELECT id, name, email, avatar_color, avatar_image FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1) AND family_id IS NOT NULL',
-      [req.userId]
+      [userId]
     );
     res.json(result.rows);
   } catch (err) {
@@ -184,14 +209,14 @@ router.get('/members', async (req, res) => {
 });
 
 router.post('/create', async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId;
   try {
-    const userId = req.userId;
-    
-    const userResult = await query('SELECT family_id FROM users WHERE id = $1', [userId]);
+    const userResult = await query<DbRow>('SELECT family_id FROM users WHERE id = $1', [userId]);
     const user = userResult.rows[0];
     
     if (user.family_id) {
-      return res.status(400).json({ error: 'Você já faz parte de uma família' });
+      res.status(400).json({ error: 'Você já faz parte de uma família' });
+      return;
     }
 
     const familyId = crypto.randomUUID();
@@ -200,12 +225,12 @@ router.post('/create', async (req, res) => {
     await query('UPDATE categories SET family_id = $1 WHERE user_id = $2', [familyId, userId]);
     await query('UPDATE transactions SET family_id = $1 WHERE user_id = $2', [familyId, userId]);
     
-    const updatedUser = await query(
+    const updatedUser = await query<DbRow>(
       'SELECT id, name, email, avatar_color, avatar_image, family_id, invite_code FROM users WHERE id = $1',
       [userId]
     );
     
-    const token = createToken(updatedUser.rows[0]);
+    const token = createToken({ id: updatedUser.rows[0].id as string, family_id: updatedUser.rows[0].family_id as string | null });
     
     res.json({ 
       message: 'Família criada com sucesso!',
@@ -217,14 +242,5 @@ router.post('/create', async (req, res) => {
     res.status(500).json({ error: 'Erro ao criar família' });
   }
 });
-
-async function getFamilyMembers(familyId) {
-  if (!familyId) return [];
-  const result = await query(
-    'SELECT id, name, email, avatar_color, avatar_image FROM users WHERE family_id = $1',
-    [familyId]
-  );
-  return result.rows;
-}
 
 export default router;

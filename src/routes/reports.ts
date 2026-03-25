@@ -1,15 +1,16 @@
 import express from 'express';
 import PDFDocument from 'pdfkit';
 import { query } from '../db/pool.js';
-import { authenticate } from '../middleware/auth.js';
+import type { DbRow } from '../db/pool.js';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = express.Router();
 router.use(authenticate);
 
-const fmt = (value) =>
-  'R$ ' + parseFloat(value || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const fmt = (value: unknown): string =>
+  'R$ ' + parseFloat(String(value || 0)).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
-const fmtDate = (dateStr) => {
+const fmtDate = (dateStr: string): string => {
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
@@ -27,12 +28,12 @@ const C = {
   ink:        '#1f2937',
 };
 
-function hLine(doc, y, x1 = 50, x2, color = C.line, lw = 0.5) {
+function hLine(doc: PDFKit.PDFDocument, y: number, x1 = 50, x2?: number, color = C.line, lw = 0.5): void {
   doc.moveTo(x1, y).lineTo(x2 ?? doc.page.width - 50, y)
      .lineWidth(lw).strokeColor(color).stroke();
 }
 
-function sectionHeader(doc, title, y) {
+function sectionHeader(doc: PDFKit.PDFDocument, title: string, y: number): number {
   const W = doc.page.width;
   doc.rect(50, y, W - 100, 22).fill(C.green);
   doc.fillColor(C.white).fontSize(8.5).font('Helvetica-Bold')
@@ -42,34 +43,38 @@ function sectionHeader(doc, title, y) {
 }
 
 router.get('/pdf', async (req, res) => {
-  const { month, year, date_from, date_to } = req.query;
+  const userId = (req as AuthenticatedRequest).userId;
+  const { month, year, date_from, date_to } = req.query as Record<string, string | undefined>;
 
   try {
-    const userResult = await query(
+    const userResult = await query<DbRow>(
       'SELECT name, email, family_id FROM users WHERE id = $1',
-      [req.userId]
+      [userId]
     );
-    const { name: userName, email: userEmail, family_id: familyId } = userResult.rows[0] ?? {};
+    const userRow = userResult.rows[0];
+    const userName = userRow?.name as string || '';
+    const userEmail = userRow?.email as string || '';
+    const familyId = userRow?.family_id as string | null;
 
-    let baseParams = [req.userId];
+    let baseParams: (string | number)[] = [userId];
     let baseFilter = 't.user_id = $1';
     if (familyId) {
-      baseParams = [req.userId, familyId];
+      baseParams = [userId, familyId];
       baseFilter = '(t.user_id = $1 OR t.family_id = $2)';
     }
 
     let periodLabel = '';
-    let dateParams  = [...baseParams];
-    let dateFilter  = baseFilter;
-    const idx       = baseParams.length + 1;
+    let dateParams: (string | number)[] = [...baseParams];
+    let dateFilter = baseFilter;
+    const idx = baseParams.length + 1;
 
     if (date_from && date_to) {
       dateFilter += ` AND t.date BETWEEN $${idx} AND $${idx + 1}`;
       dateParams.push(date_from, date_to);
       periodLabel = `${fmtDate(date_from)} a ${fmtDate(date_to)}`;
     } else {
-      const m = parseInt(month) || new Date().getMonth() + 1;
-      const y = parseInt(year)  || new Date().getFullYear();
+      const m = parseInt(month || '') || new Date().getMonth() + 1;
+      const y = parseInt(year || '')  || new Date().getFullYear();
       dateFilter += ` AND EXTRACT(MONTH FROM t.date) = $${idx} AND EXTRACT(YEAR FROM t.date) = $${idx + 1}`;
       dateParams.push(m, y);
       const mNames = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
@@ -78,7 +83,7 @@ router.get('/pdf', async (req, res) => {
     }
 
     const [summaryRes, categoryRes, transactionsRes] = await Promise.all([
-      query(`
+      query<DbRow>(`
         SELECT
           COALESCE(SUM(CASE WHEN type = 'income'  THEN amount ELSE 0 END), 0) AS total_income,
           COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense,
@@ -86,7 +91,7 @@ router.get('/pdf', async (req, res) => {
         FROM transactions t WHERE ${dateFilter}
       `, dateParams),
 
-      query(`
+      query<DbRow>(`
         SELECT c.name,
           COALESCE(SUM(t.amount), 0) AS total
         FROM transactions t
@@ -97,7 +102,7 @@ router.get('/pdf', async (req, res) => {
         ORDER BY total DESC
       `, dateParams),
 
-      query(`
+      query<DbRow>(`
         SELECT t.date, t.description, t.type, t.amount,
                c.name AS category_name
         FROM transactions t
@@ -107,9 +112,9 @@ router.get('/pdf', async (req, res) => {
       `, dateParams),
     ]);
 
-    const totalIncome  = parseFloat(summaryRes.rows[0]?.total_income  || 0);
-    const totalExpense = parseFloat(summaryRes.rows[0]?.total_expense || 0);
-    const totalTx      = parseInt(summaryRes.rows[0]?.total_tx        || 0);
+    const totalIncome  = parseFloat(String(summaryRes.rows[0]?.total_income  || '0'));
+    const totalExpense = parseFloat(String(summaryRes.rows[0]?.total_expense || '0'));
+    const totalTx      = parseInt(String(summaryRes.rows[0]?.total_tx        || '0'));
     const balance      = totalIncome - totalExpense;
 
     const doc = new PDFDocument({
@@ -196,10 +201,10 @@ router.get('/pdf', async (req, res) => {
       const valW   = 72;
       const barX   = ML + nameW + 12;
       const barW   = CW - nameW - pctW - valW - 30;
-      const maxVal = parseFloat(expCats[0]?.total || 1);
+      const maxVal = parseFloat(String(expCats[0]?.total || '1'));
 
       expCats.forEach((cat, i) => {
-        const val   = parseFloat(cat.total);
+        const val   = parseFloat(String(cat.total));
         const pct   = totalExpense > 0 ? (val / totalExpense) * 100 : 0;
         const fill  = Math.max((val / maxVal) * barW, 2);
         const rowBg = i % 2 === 0 ? C.white : C.bg;
@@ -207,7 +212,7 @@ router.get('/pdf', async (req, res) => {
         doc.rect(ML, y, CW, 20).fill(rowBg);
 
         doc.fillColor(C.ink).fontSize(8.5).font('Helvetica')
-           .text(cat.name, ML + 10, y + 5.5, { width: nameW - 10, lineBreak: false });
+           .text(cat.name as string, ML + 10, y + 5.5, { width: nameW - 10, lineBreak: false });
 
         doc.rect(barX, y + 7.5, barW, 5).fill(C.line);
         doc.rect(barX, y + 7.5, fill, 5).fill(C.green);
@@ -228,12 +233,12 @@ router.get('/pdf', async (req, res) => {
 
     const rows = transactionsRes.rows;
 
-    const renderTxHeader = (yh) => {
+    const renderTxHeader = (yh: number): number => {
       doc.rect(ML, yh, CW, 20).fill(C.ink);
       [
         { text: 'Descricao', x: COL.desc, w: COL.descW },
         { text: 'Categoria', x: COL.cat,  w: COL.catW  },
-        { text: 'Valor',     x: COL.amt,  w: COL.amtW, align: 'right' },
+        { text: 'Valor',     x: COL.amt,  w: COL.amtW, align: 'right' as const },
       ].forEach(c =>
         doc.fillColor(C.white).fontSize(7.5).font('Helvetica-Bold')
            .text(c.text, c.x, yh + 6, {
@@ -267,11 +272,11 @@ router.get('/pdf', async (req, res) => {
         doc.rect(ML, y, CW, 18).fill(rowBg);
 
         doc.fillColor(C.ink).fontSize(8).font('Helvetica')
-           .text((tx.description || '').substring(0, 45), COL.desc, y + 5,
+           .text((tx.description as string || '').substring(0, 45), COL.desc, y + 5,
              { width: COL.descW, lineBreak: false });
 
         doc.fillColor(C.gray).fontSize(7.5).font('Helvetica')
-           .text(tx.category_name || '-', COL.cat, y + 5,
+           .text((tx.category_name as string) || '-', COL.cat, y + 5,
              { width: COL.catW, lineBreak: false });
 
         doc.fillColor(amtColor).fontSize(8.5).font('Helvetica-Bold')
