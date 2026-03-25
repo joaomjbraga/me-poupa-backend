@@ -315,14 +315,16 @@ me-poupa-backend/
 ## 📜 Scripts Disponíveis
 
 ```bash
-npm run typecheck  # Verificar tipos TypeScript
-npm run build      # Compilar TypeScript para JavaScript
-npm run test       # Executar testes automatizados
-npm run test:watch # Executar testes em modo watch
+npm run typecheck    # Verificar tipos TypeScript
+npm run build        # Compilar TypeScript para JavaScript
+npm run test         # Executar testes automatizados
+npm run test:watch   # Executar testes em modo watch
 npm run test:coverage # Executar testes com cobertura
-npm start          # Iniciar em produção (usa dist/)
-npm run dev        # Iniciar em desenvolvimento (com ts-node/esm)
+npm start            # Iniciar em produção (usa dist/)
+npm run dev          # Iniciar em desenvolvimento (com tsx + nodemon)
 ```
+
+> O servidor de desenvolvimento usa **tsx** para executar TypeScript diretamente com hot reload via **nodemon**.
 
 ---
 
