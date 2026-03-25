@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/typescript-5.0+-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/tests-41%20passing-4CAF50?style=for-the-badge" alt="Tests" />
   <img src="https://img.shields.io/badge/licença-MIT-yellow?style=for-the-badge" alt="MIT" />
 </p>
 
@@ -278,13 +278,17 @@ me-poupa-backend/
 │   ├── middleware/
 │   │   ├── auth.ts             # Autenticação via JWT + cookies
 │   │   ├── rateLimiter.ts      # Controle de taxa de requisições
-│   │   └── validate.ts          # Validação de inputs
+│   │   └── validate.ts         # Validação de inputs
 │   │
 │   ├── routes/
 │   │   ├── auth.ts             # Autenticação e perfil
+│   │   ├── auth.test.ts        # Testes de autenticação
 │   │   ├── transactions.ts     # CRUD de transações
+│   │   ├── transactions.test.ts # Testes de transações
 │   │   ├── resources.ts        # Categorias
+│   │   ├── categories.test.ts   # Testes de categorias
 │   │   ├── family.ts           # Grupos familiares
+│   │   ├── family.test.ts      # Testes de família
 │   │   ├── notifications.ts    # Notificações
 │   │   └── reports.ts          # Geração de PDF
 │   │
@@ -294,8 +298,11 @@ me-poupa-backend/
 │   ├── types/
 │   │   └── index.ts            # Tipos TypeScript
 │   │
+│   ├── app.ts                  # App Express (para testes)
+│   ├── health.test.ts           # Testes de health check
 │   └── index.ts                # Entry point da aplicação
 │
+├── vitest.config.ts            # Configuração do Vitest
 ├── tsconfig.json               # Configuração do TypeScript
 ├── .env.example                # Modelo de variáveis de ambiente
 ├── docker-compose.yml          # Orquestração dos serviços
@@ -310,6 +317,9 @@ me-poupa-backend/
 ```bash
 npm run typecheck  # Verificar tipos TypeScript
 npm run build      # Compilar TypeScript para JavaScript
+npm run test       # Executar testes automatizados
+npm run test:watch # Executar testes em modo watch
+npm run test:coverage # Executar testes com cobertura
 npm start          # Iniciar em produção (usa dist/)
 npm run dev        # Iniciar em desenvolvimento (com ts-node/esm)
 ```

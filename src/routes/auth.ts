@@ -1,11 +1,11 @@
-import express from 'express';
 import bcrypt from 'bcryptjs';
+import express from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
+import type { Server as SocketServer } from 'socket.io';
+import type { DbRow } from '../db/pool.js';
 import { query } from '../db/pool.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
 import { emitToFamily } from '../utils/socketHelpers.js';
-import type { Server as SocketServer } from 'socket.io';
-import type { DbRow } from '../db/pool.js';
 
 const router = express.Router();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -97,8 +97,8 @@ router.post('/register', authLimiter, async (req, res) => {
     const avatarColor = colors[Math.floor(Math.random() * colors.length)];
 
     const userResult = await query<DbRow>(
-      `INSERT INTO users (name, email, password_hash, avatar_color, invite_code) 
-       VALUES ($1, $2, $3, $4, gen_random_uuid()) 
+      `INSERT INTO users (name, email, password_hash, avatar_color, invite_code)
+       VALUES ($1, $2, $3, $4, gen_random_uuid())
        RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at`,
       [name.trim(), email.toLowerCase(), passwordHash, avatarColor]
     );
@@ -228,10 +228,10 @@ router.put('/profile', async (req, res) => {
   try {
     const secret: Secret = process.env.JWT_SECRET || 'default-secret';
     const decoded = jwt.verify(token, secret) as TokenPayload;
-    
+
     const userResult = await query<DbRow>('SELECT family_id FROM users WHERE id = $1', [decoded.userId]);
     const familyId = userResult.rows[0]?.family_id as string | null;
-    
+
     const result = await query<DbRow>(
       'UPDATE users SET name = $1, avatar_color = COALESCE($2, avatar_color), avatar_image = $3 WHERE id = $4 RETURNING id, name, email, avatar_color, avatar_image, family_id, invite_code, created_at',
       [name.trim(), avatar_color, avatar_image, decoded.userId]
@@ -240,7 +240,7 @@ router.put('/profile', async (req, res) => {
       res.status(404).json({ error: 'Usuário não encontrado' });
       return;
     }
-    
+
     const io = req.app.get('io') as SocketServer;
     const userSockets = req.app.get('userSockets') as Map<string, string>;
     if (familyId) {
@@ -249,7 +249,7 @@ router.put('/profile', async (req, res) => {
         user: result.rows[0]
       });
     }
-    
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Profile update error:', err);
@@ -274,7 +274,7 @@ router.put('/email', async (req, res) => {
   try {
     const secret: Secret = process.env.JWT_SECRET || 'default-secret';
     const decoded = jwt.verify(token, secret) as TokenPayload;
-    
+
     const existing = await query<DbRow>('SELECT id FROM users WHERE email = $1 AND id != $2', [email.toLowerCase(), decoded.userId]);
     if (existing.rows.length > 0) {
       res.status(409).json({ error: 'Este email já está em uso' });
@@ -318,7 +318,7 @@ router.put('/password', async (req, res) => {
   try {
     const secret: Secret = process.env.JWT_SECRET || 'default-secret';
     const decoded = jwt.verify(token, secret) as TokenPayload;
-    
+
     const userResult = await query<DbRow>('SELECT password_hash FROM users WHERE id = $1', [decoded.userId]);
     if (userResult.rows.length === 0) {
       res.status(404).json({ error: 'Usuário não encontrado' });
@@ -333,7 +333,7 @@ router.put('/password', async (req, res) => {
 
     const newHash = await bcrypt.hash(new_password, 12);
     await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, decoded.userId]);
-    
+
     res.json({ message: 'Senha alterada com sucesso' });
   } catch {
     res.status(401).json({ error: 'Token inválido' });
