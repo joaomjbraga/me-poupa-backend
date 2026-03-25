@@ -28,12 +28,12 @@ const C = {
   ink:        '#1f2937',
 };
 
-function hLine(doc: PDFKit.PDFDocument, y: number, x1 = 50, x2?: number, color = C.line, lw = 0.5): void {
+function hLine(doc: typeof PDFDocument.prototype, y: number, x1 = 50, x2?: number, color = C.line, lw = 0.5): void {
   doc.moveTo(x1, y).lineTo(x2 ?? doc.page.width - 50, y)
      .lineWidth(lw).strokeColor(color).stroke();
 }
 
-function sectionHeader(doc: PDFKit.PDFDocument, title: string, y: number): number {
+function sectionHeader(doc: typeof PDFDocument.prototype, title: string, y: number): number {
   const W = doc.page.width;
   doc.rect(50, y, W - 100, 22).fill(C.green);
   doc.fillColor(C.white).fontSize(8.5).font('Helvetica-Bold')
